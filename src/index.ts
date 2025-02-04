@@ -1,1 +1,3 @@
-export const x = 3;
+import * as numpy from "./numpy";
+
+export { numpy };
