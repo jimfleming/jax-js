@@ -17,5 +17,6 @@ import { numpy as np } from "jax-js";
 // });
 
 test("can create array", () => {
-  np.array();
+  const result = np.neg(np.cos(np.array([1, 2, 3])));
+  np.debugPrint(result);
 });
