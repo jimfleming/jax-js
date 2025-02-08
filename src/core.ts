@@ -2,7 +2,7 @@ import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-core/dist/public/chained_ops/register_all_chained_ops";
 import "@tensorflow/tfjs-core/dist/register_all_gradients";
 import "@tensorflow/tfjs-backend-cpu";
-import { unzip2, zip } from "./utils";
+import { deepEqual, range, unzip2, zip } from "./utils";
 import {
   JsTreeDef,
   flatten as treeFlatten,
@@ -163,28 +163,26 @@ abstract class Tracer {
   neg() {
     return this.aval._neg(this) as this;
   }
-  add(other: this) {
-    return this.aval._add(this, other) as this;
+  add(other: this | TracerValue) {
+    return this.aval._add(this, pureArray(other)) as this;
   }
-  mul(other: this) {
-    return this.aval._mul(this, other) as this;
+  mul(other: this | TracerValue) {
+    return this.aval._mul(this, pureArray(other)) as this;
   }
-  gt(other: this) {
-    return this.aval._gt(this, other) as this;
+  gt(other: this | TracerValue) {
+    return this.aval._gt(this, pureArray(other)) as this;
   }
-  lt(other: this) {
-    return this.aval._lt(this, other) as this;
+  lt(other: this | TracerValue) {
+    return this.aval._lt(this, pureArray(other)) as this;
   }
+}
 
-  // TODO
-  /*
-
-  def __getattr__(self, name):
-    try:
-      return getattr(self.aval, name)
-    except AttributeError:
-      raise AttributeError(f"{self.__class__.__name__} has no attribute {name}")
-*/
+export function ndim(x: TracerValue) {
+  if (x instanceof Tracer) {
+    return x.shape.length;
+  } else {
+    return 0;
+  }
 }
 
 const JsArray = globalThis.Array;
@@ -216,7 +214,7 @@ class ShapedArray implements AbstractValue {
     return (
       this === other ||
       (this.constructor === other.constructor &&
-        this.shape.length === other.shape.length &&
+        this.ndim === other.ndim &&
         this.shape.every((d, i) => d === other.shape[i]))
     );
   }
@@ -381,11 +379,8 @@ const implRules: Record<Primitive, ImplRule> = {
   },
   [Primitive.Broadcast](
     [x],
-    { shape, axes }: { shape?: number[]; axes?: number[] }
+    { shape, axes }: { shape: number[]; axes: number[] }
   ) {
-    if (shape === undefined || axes === undefined) {
-      throw new Error("Must provide shape and axes to broadcast");
-    }
     let data = x.data;
     for (const axis of axes.toSorted()) {
       data = tf.expandDims(data, axis);
@@ -644,23 +639,52 @@ type VmapRule = (
   params: any
 ) => [Tracer[], (number | null)[]];
 
-function binopBatchingRule(op: (x: Tracer, y: Tracer) => Tracer) {
+function handleScalarBroadcasting(nd: number, x: Tracer, d: number | null) {
+  if (d === null || nd === ndim(x)) {
+    return x;
+  } else {
+    const axes = range(ndim(x), nd);
+    const shape = [...x.shape, ...axes.map(() => 1)];
+    return broadcast(x, shape, axes);
+  }
+}
+
+/** Process a primitive with built-in broadcasting. */
+function broadcastBatcher(op: (...x: Tracer[]) => Tracer) {
   return (
     axisSize: number,
-    valsIn: Tracer[],
-    dimsIn: (number | null)[]
+    args: Tracer[],
+    dims: (number | null)[]
   ): ReturnType<VmapRule> => {
-    let [x, y] = valsIn;
-    let [xBdim, yBdim] = dimsIn;
-    if (xBdim !== yBdim) {
-      if (xBdim === null) {
-        x = moveBatchAxis(axisSize, xBdim, yBdim!, x);
-        xBdim = yBdim;
-      } else {
-        y = moveBatchAxis(axisSize, yBdim, xBdim, y);
-      }
+    if (args.length === 0) {
+      throw new Error("Empty list in broadcastBatcher");
     }
-    return [[op(x, y)], [xBdim]];
+
+    const idx = dims.findIndex((d) => d !== null);
+    if (idx === -1) {
+      // No-op case: no mapped indices, just pass it down to the parent tracer.
+      return [[op(...args)], [null]];
+    }
+    if (
+      // If only agreeing batch dims, as well as scalars, just call the primitive.
+      zip(args, dims).every(
+        ([x, d]) =>
+          ndim(x) === 0 ||
+          (deepEqual(x.shape, args[idx].shape) && d === dims[idx])
+      )
+    ) {
+      return [[op(...args)], [dims[idx]]];
+    }
+
+    args = args.map((x, i) =>
+      ndim(x) > 0 ? moveBatchAxis(axisSize, dims[i], 0, x) : x
+    );
+    // Now the batch axis has been added to the front. Handle special-case of
+    // scalar broadcasting, since unmapped axes may have a singleton axis
+    // inserted and then rely on the built-in broadcasting of the primitive.
+    const nd = Math.max(...args.map(ndim));
+    args = args.map((x, i) => handleScalarBroadcasting(nd, x, dims[i]));
+    return [[op(...args)], [0]];
   };
 }
 
@@ -675,8 +699,8 @@ function vectorizedUnopBatchingRule(op: (x: Tracer) => Tracer) {
 }
 
 const vmapRules: Partial<Record<Primitive, VmapRule>> = {
-  [Primitive.Add]: binopBatchingRule(add),
-  [Primitive.Mul]: binopBatchingRule(mul),
+  [Primitive.Add]: broadcastBatcher(add),
+  [Primitive.Mul]: broadcastBatcher(mul),
   [Primitive.Neg]: vectorizedUnopBatchingRule(neg),
   [Primitive.Sin]: vectorizedUnopBatchingRule(sin),
   [Primitive.Cos]: vectorizedUnopBatchingRule(cos),

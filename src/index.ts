@@ -27,7 +27,7 @@ export const jvp = core.jvp as <F extends (...args: any[]) => JsTree<Array>>(
 /** Vectorize an operation on a batched axis for one or more inputs. */
 export const vmap = core.vmap as <F extends (...args: any[]) => JsTree<Array>>(
   f: WithArgsSubtype<F, JsTree<ArrayLike>>,
-  inAxes: MapJsTree<Parameters<F>, Array, number>
+  inAxes: MapJsTree<Parameters<F>, Array, number | null>
 ) => F;
 
 /** Compute the Jacobian evaluated column-by-column by forward-mode AD. */

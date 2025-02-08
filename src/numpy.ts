@@ -45,6 +45,9 @@ export const moveaxis = core.moveaxis as (
   dst: number
 ) => Array;
 
+/** Compute the number of dimensions of an array. */
+export const ndim = core.ndim as (x: ArrayLike) => number;
+
 export function array(
   values: Array | tf.TensorLike,
   { shape, dtype }: { shape?: number[]; dtype?: DType } = {}
