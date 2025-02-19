@@ -37,7 +37,7 @@ export const jacfwd = core.jacfwd as <F extends (x: Array) => Array>(
 ) => F;
 
 /** Construct a Jaxpr by dynamically tracing a function with example inputs. */
-export const makeJaxpr = core.makeJaxpr as <
+export const makeJaxpr = core.makeJaxpr as unknown as <
   F extends (...args: any[]) => JsTree<Array>,
 >(
   f: WithArgsSubtype<F, JsTree<ArrayLike>>
@@ -46,3 +46,17 @@ export const makeJaxpr = core.makeJaxpr as <
   consts: Array[];
   treedef: JsTreeDef;
 };
+
+/**
+ * Produce a local linear approximation to a function at a point using jvp() and
+ * partial evaluation.
+ */
+export const linearize = core.linearize as <
+  F extends (...args: any[]) => JsTree<Array>,
+>(
+  f: WithArgsSubtype<F, JsTree<ArrayLike>>,
+  ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+) => [
+  ReturnType<F>,
+  (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>,
+];

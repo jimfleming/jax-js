@@ -43,3 +43,44 @@ export function range(start: number, stop: number, step: number = 1): number[] {
   }
   return result;
 }
+
+/** Topologically sort a DAG, given terminal nodes and an ancestor function. */
+export function toposort<T>(terminals: T[], parents: (node: T) => T[]) {
+  const childCounts: Map<T, number> = new Map();
+
+  // First iteartion counts the number of children for each node.
+  const stack = [...new Set(terminals)];
+  while (true) {
+    const node = stack.pop();
+    if (!node) break;
+    for (const parent of parents(node)) {
+      if (childCounts.has(parent)) {
+        childCounts.set(parent, childCounts.get(parent)! + 1);
+      } else {
+        childCounts.set(parent, 1);
+        stack.push(parent);
+      }
+    }
+  }
+  for (const node of terminals) {
+    childCounts.set(node, childCounts.get(node)! - 1);
+  }
+
+  // Second iteration produces a reverse topological order.
+  const order: T[] = [];
+  const frontier = terminals.filter((n) => !childCounts.get(n));
+  while (true) {
+    const node = frontier.pop();
+    if (!node) break;
+    order.push(node);
+    for (const parent of parents(node)) {
+      const c = childCounts.get(parent)! - 1;
+      childCounts.set(parent, c);
+      if (c == 0) {
+        frontier.push(parent);
+      }
+    }
+  }
+
+  return order.reverse();
+}

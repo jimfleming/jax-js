@@ -1,8 +1,10 @@
+/** @file Core library internals and interpreter stack, based on Autodidax. */
+
 import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-core/dist/public/chained_ops/register_all_chained_ops";
 import "@tensorflow/tfjs-core/dist/register_all_gradients";
 import "@tensorflow/tfjs-backend-cpu";
-import { deepEqual, range, unzip2, zip } from "./utils";
+import { deepEqual, range, toposort, unzip2, zip } from "./utils";
 import {
   JsTreeDef,
   flatten as treeFlatten,
@@ -209,8 +211,8 @@ class ShapedArray implements AbstractValue {
   readonly arrayAbstractionLevel: number = 1;
 
   constructor(
-    public readonly shape: number[],
-    public readonly dtype: DType
+    readonly shape: number[],
+    readonly dtype: DType
   ) {}
 
   static fromAval(aval: AbstractValue) {
@@ -245,7 +247,7 @@ class ShapedArray implements AbstractValue {
 class ConcreteArray extends ShapedArray {
   readonly arrayAbstractionLevel: number = 2;
 
-  constructor(public readonly val: tf.Tensor) {
+  constructor(readonly val: tf.Tensor) {
     super(val.shape, val.dtype as any);
   }
 }
@@ -259,7 +261,7 @@ class ConcreteArray extends ShapedArray {
 export class Array extends Tracer {
   readonly dtype: DType;
 
-  constructor(public readonly data: tf.Tensor) {
+  constructor(readonly data: tf.Tensor) {
     super(baseArrayTrace);
     if (Object.values(DType).includes(data.dtype as any)) {
       this.dtype = data.dtype as DType;
@@ -274,7 +276,7 @@ export class Array extends Tracer {
 
   /** Return a simple string representation of the array's dimensions. */
   toString(): string {
-    return `Array[${this.data.shape.join(", ")}]`;
+    return `Array:${this.dtype}[${this.data.shape.join(",")}]`;
   }
 
   /** Convert this array into a JavaScript object (blocking). */
@@ -358,10 +360,10 @@ class EvalTrace extends Trace {
 
   processPrimitive(
     primitive: Primitive,
-    tracers: Tracer[],
+    tracers: Array[],
     params: Record<string, any>
   ): Tracer[] {
-    return implRules[primitive](tracers as Array[], params);
+    return implRules[primitive](tracers, params);
   }
 }
 
@@ -419,8 +421,8 @@ function zerosLike(val: TracerValue): Array {
 class JVPTracer extends Tracer {
   constructor(
     trace: Trace,
-    public readonly primal: Tracer,
-    public readonly tangent: Tracer
+    readonly primal: Tracer,
+    readonly tangent: Tracer
   ) {
     super(trace);
   }
@@ -592,8 +594,8 @@ export function moveaxis(x: TracerValue, src: number, dst: number) {
 class BatchTracer extends Tracer {
   constructor(
     trace: Trace,
-    public readonly val: Tracer,
-    public readonly batchDim: number | null
+    readonly val: Tracer,
+    readonly batchDim: number | null
   ) {
     super(trace);
   }
@@ -1031,14 +1033,7 @@ class JaxprTrace extends Trace {
     let tracer = this.builder.constTracers.get(val);
     if (tracer === undefined) {
       tracer = this.builder.newTracer(this, ShapedArray.fromAval(getAval(val)));
-      const val2 = pureArray(val);
-      if (!(val2 instanceof Array)) {
-        throw new TypeError(
-          `getOrMakeConstTracer got tracer ${val2} instead of concrete array, ` +
-            "is JaxprTrace not the bottom of the interpreter stack?"
-        );
-      }
-      this.builder.addConst(tracer, val2);
+      this.builder.addConst(tracer, pureArray(val));
     }
     return tracer;
   }
@@ -1076,7 +1071,7 @@ class JaxprBuilder {
   eqns: JaxprEqn[] = [];
   tracerToVar: Map<JaxprTracer, Var> = new Map();
   constTracers: Map<TracerValue, JaxprTracer> = new Map(); // already-seen value -> tracer
-  constVals: Map<Var, Array> = new Map(); // var -> const value
+  constVals: Map<Var, Tracer> = new Map(); // var -> const value
   tracers: JaxprTracer[] = [];
 
   newTracer(trace: JaxprTrace, aval: ShapedArray): JaxprTracer {
@@ -1106,7 +1101,7 @@ class JaxprBuilder {
     return v;
   }
 
-  addConst(tracer: JaxprTracer, val: Array) {
+  addConst(tracer: JaxprTracer, val: Tracer) {
     const v = this.addVar(tracer);
     this.constTracers.set(val, tracer);
     this.constVals.set(v, val);
@@ -1116,7 +1111,7 @@ class JaxprBuilder {
   build(
     inTracers: JaxprTracer[],
     outTracers: JaxprTracer[]
-  ): { jaxpr: Jaxpr; consts: Array[] } {
+  ): { jaxpr: Jaxpr; consts: Tracer[] } {
     // Initially, concatenate the constants as the first few inputs.
     let [constVars, consts] = unzip2(this.constVals.entries());
     const t2v = this.getVar.bind(this); // Maps tracer to value.
@@ -1131,13 +1126,13 @@ class JaxprBuilder {
   }
 }
 
-function _inlineLiterals(jaxpr: Jaxpr, consts: Array[]): [Jaxpr, Array[]] {
+function _inlineLiterals(jaxpr: Jaxpr, consts: Tracer[]): [Jaxpr, Tracer[]] {
   const literals = new Map<Atom, Lit>();
   const constBinders: Var[] = [];
-  const newConsts: Array[] = [];
+  const newConsts: Tracer[] = [];
 
   for (let i = 0; i < consts.length; i++) {
-    if (ndim(consts[i]) === 0) {
+    if (ndim(consts[i]) === 0 && consts[i] instanceof Array) {
       literals.set(jaxpr.inBinders[i], new Lit(consts[i] as any));
     } else {
       constBinders.push(jaxpr.inBinders[i]);
@@ -1263,8 +1258,8 @@ const abstractEvalRules: Record<Primitive, AbstractEvalRule> = {
 };
 
 export function makeJaxpr(
-  f: Function
-): (...argsIn: any) => { jaxpr: Jaxpr; consts: Array[]; treedef: JsTreeDef } {
+  f: (...args: any[]) => any
+): (...argsIn: any) => { jaxpr: Jaxpr; consts: Tracer[]; treedef: JsTreeDef } {
   return (...argsIn) => {
     const [avalsIn, inTree] = treeFlatten(argsIn);
     const [fFlat, outTree] = flattenFun(f, inTree);
@@ -1287,4 +1282,273 @@ export function makeJaxpr(
     }
     return { jaxpr, consts, treedef: outTree.value };
   };
+}
+
+// linearize, partial evaluation
+
+/** Array value that can either be known or unknown. */
+class PartialVal {
+  constructor(
+    readonly val: Tracer | null,
+    readonly aval: ShapedArray
+  ) {}
+
+  static known(val: Tracer): PartialVal {
+    return new PartialVal(val, ShapedArray.fromAval(val.aval));
+  }
+
+  static unknown(aval: AbstractValue): PartialVal {
+    return new PartialVal(null, ShapedArray.fromAval(aval));
+  }
+
+  get isKnown(): boolean {
+    return this.val !== null;
+  }
+
+  toString(): string {
+    return this.val ? this.val.toString() : this.aval.strShort();
+  }
+}
+
+function partialEvalFlat(
+  f: (...args: any[]) => any,
+  pvalsIn: PartialVal[]
+): { jaxpr: Jaxpr; pvalsOut: PartialVal[]; consts: Tracer[] } {
+  const main = newMain(PartialEvalTrace);
+  const trace = new PartialEvalTrace(main);
+  const tracersIn = pvalsIn.map((pval) => trace.newArg(pval));
+  const outs = f(...tracersIn);
+  const tracersOut: PartialEvalTracer[] = outs.map((out: TracerValue) =>
+    fullRaise(trace, out)
+  );
+  const pvalsOut = tracersOut.map((t) => t.pval);
+  const unknownTracersIn = tracersIn.filter((t) => !t.pval.isKnown);
+  const unknownTracersOut = tracersOut.filter((t) => !t.pval.isKnown);
+  const { jaxpr, consts } = partialEvalGraphToJaxpr(
+    unknownTracersIn,
+    unknownTracersOut
+  );
+  return { jaxpr, pvalsOut, consts };
+}
+
+function linearizeFlat(
+  f: (...args: any[]) => any,
+  primalsIn: Tracer[]
+): [Tracer[], (...args: any[]) => any] {
+  const pvalsIn = [
+    ...primalsIn.map(PartialVal.known),
+    ...primalsIn.map((t) => PartialVal.unknown(t.aval)),
+  ];
+  const jvpF = (...x: Tracer[]) => {
+    // Args contain both primals and tangents, concatenated.
+    const k = x.length / 2;
+    const [primalsOut, tangentsOut] = jvp(f, x.slice(0, k), x.slice(k, 2 * k));
+    return [...primalsOut, ...tangentsOut];
+  };
+  const { jaxpr, pvalsOut, consts } = partialEvalFlat(jvpF, pvalsIn);
+  const primalPvals = pvalsOut.slice(0, pvalsOut.length / 2);
+  if (!primalPvals.every((pval) => pval.isKnown)) {
+    throw new TypeError(
+      "Not all primal values are known after partial evaluation"
+    );
+  }
+  const primalsOut = primalPvals.map((pval) => pval.val!);
+  const fLin = (...tangents: Tracer[]) =>
+    evalJaxpr(jaxpr, [...consts, ...tangents]);
+  return [primalsOut, fLin];
+}
+
+export function linearize(
+  f: (...primals: any[]) => any,
+  ...primalsIn: any[]
+): [any, (...tangents: any[]) => any] {
+  const [primalsInFlat, inTree] = treeFlatten(primalsIn);
+  const [fFlat, outTree] = flattenFun(f, inTree);
+  const [primalsOutFlat, fLinFlat] = linearizeFlat(
+    fFlat,
+    primalsInFlat.map(pureArray)
+  );
+  if (outTree.value === undefined) {
+    throw new Error("outTree was not set in linearize");
+  }
+  const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
+  const fLin = (...tangentsIn: any[]) => {
+    const [tangentsInFlat, inTree2] = treeFlatten(tangentsIn);
+    if (!inTree.equals(inTree2)) {
+      throw new TypeError("Mismatched tree structures in linearize");
+    }
+    const tangentsOutFlat = fLinFlat(...tangentsInFlat.map(pureArray));
+    return treeUnflatten(outTree.value!, tangentsOutFlat);
+  };
+  return [primalsOut, fLin];
+}
+
+// Used in PartialEvalTracer to track recipes for "unknown" partial vals.
+type JaxprRecipe =
+  | {
+      type: "LambdaBinding";
+    }
+  | {
+      // Note: Not really a constant, actually just a "known" value translated
+      // into unknown for abstract evaluation rules.
+      type: "Const";
+      val: Tracer;
+    }
+  | {
+      type: "JaxprEqn";
+      prim: Primitive;
+      tracersIn: PartialEvalTracer[];
+      params: Record<string, any>;
+      avalsOut: ShapedArray[];
+      tracerRefsOut: WeakRef<PartialEvalTracer>[];
+    };
+
+class PartialEvalTracer extends Tracer {
+  constructor(
+    trace: Trace,
+    readonly pval: PartialVal,
+    readonly recipe: JaxprRecipe | null
+  ) {
+    super(trace);
+  }
+
+  get aval(): AbstractValue {
+    return this.pval.aval;
+  }
+
+  fullLower(): Tracer {
+    if (this.pval.isKnown) {
+      return this.pval.val!;
+    }
+    return this;
+  }
+
+  toString(): string {
+    if (!this.recipe) {
+      return `PartialEvalTracer(${this.pval})`;
+    } else {
+      return `PartialEvalTracer<${this.recipe.type}>(${this.pval})`;
+    }
+  }
+}
+
+class PartialEvalTrace extends Trace {
+  newArg(pval: PartialVal) {
+    return new PartialEvalTracer(this, pval, { type: "LambdaBinding" });
+  }
+
+  pure(val: TracerValue): Tracer {
+    return new PartialEvalTracer(this, PartialVal.known(pureArray(val)), null);
+  }
+  lift = this.pure;
+
+  instantiateConst(tracer: PartialEvalTracer) {
+    if (!tracer.pval.isKnown) {
+      return tracer;
+    } else {
+      // Translate known value into unknown "Const" recipe for abstract eval.
+      const pval = PartialVal.unknown(ShapedArray.fromAval(tracer.aval));
+      return new PartialEvalTracer(this, pval, {
+        type: "Const",
+        val: tracer.pval.val!,
+      });
+    }
+  }
+
+  processPrimitive(
+    primitive: Primitive,
+    tracers: PartialEvalTracer[],
+    params: Record<string, any>
+  ): Tracer[] {
+    if (tracers.every((t) => t.pval.isKnown)) {
+      return bind(
+        primitive,
+        tracers.map((t) => t.fullLower()),
+        params
+      );
+    }
+    const tracersIn = tracers.map((t) => this.instantiateConst(t));
+    const avalsIn = tracersIn.map((t) => t.pval.aval);
+    const avalsOut = abstractEvalRules[primitive](avalsIn, params);
+    const recipe: JaxprRecipe = {
+      type: "JaxprEqn",
+      prim: primitive,
+      tracersIn,
+      params,
+      avalsOut,
+      tracerRefsOut: [], // Populated later on
+    };
+    const tracersOut = avalsOut.map(
+      (aval) => new PartialEvalTracer(this, PartialVal.unknown(aval), recipe)
+    );
+    recipe.tracerRefsOut = tracersOut.map((t) => new WeakRef(t));
+    return tracersOut;
+  }
+}
+
+/**
+ * Convert the graph representation of a partial eval to a standard Jaxpr.
+ * Also called `tracers_to_jaxpr()` in JAX.
+ */
+function partialEvalGraphToJaxpr(
+  tracersIn: PartialEvalTracer[],
+  tracersOut: PartialEvalTracer[]
+): { jaxpr: Jaxpr; consts: Tracer[] } {
+  const tracerToVar = new Map<PartialEvalTracer, Var>();
+  const constidToVar = new Map<Tracer, Var>();
+  const constvarToVal = new Map<Var, Tracer>();
+  const processedEqns = new Set<JaxprRecipe>(); // Avoid translating the same equation multiple times.
+  const eqns: JaxprEqn[] = [];
+
+  for (const t of tracersIn) {
+    tracerToVar.set(t, new Var(ShapedArray.fromAval(t.aval)));
+  }
+
+  for (const t of toposort(tracersOut, (t) =>
+    t.recipe?.type === "JaxprEqn" ? t.recipe.tracersIn : []
+  )) {
+    if (!t.recipe) {
+      throw new TypeError("Tracer is missing a recipe, cannot construct Jaxpr");
+    }
+    if (t.recipe.type === "LambdaBinding") {
+      // Check that the binding is in the input list.
+      if (!tracersIn.includes(t)) {
+        throw new TypeError("LambdaBinding tracer not in input list");
+      }
+    } else if (t.recipe.type === "Const") {
+      const val = t.recipe.val;
+      let binder = constidToVar.get(val);
+      if (!binder) {
+        binder = new Var(ShapedArray.fromAval(val.aval));
+        constidToVar.set(val, binder);
+        constvarToVal.set(binder, val);
+      }
+      tracerToVar.set(t, binder);
+    } else if (t.recipe.type === "JaxprEqn") {
+      if (!processedEqns.has(t.recipe)) {
+        processedEqns.add(t.recipe);
+        const tracersIn = t.recipe.tracersIn.map((t) => tracerToVar.get(t)!);
+        const outBinders = t.recipe.avalsOut.map((aval) => new Var(aval));
+        for (let i = 0; i < outBinders.length; i++) {
+          const tracerOut = t.recipe.tracerRefsOut[i].deref();
+          if (tracerOut) {
+            tracerToVar.set(tracerOut, outBinders[i]);
+          }
+        }
+        eqns.push(
+          new JaxprEqn(t.recipe.prim, tracersIn, t.recipe.params, outBinders)
+        );
+      }
+    }
+  }
+
+  const [constvars, consts] = unzip2(constvarToVal.entries());
+  const inBinders = [
+    ...constvars,
+    ...tracersIn.map((t) => tracerToVar.get(t)!),
+  ];
+  const outVars = tracersOut.map((t) => tracerToVar.get(t)!);
+  const jaxpr = new Jaxpr(inBinders, eqns, outVars);
+  typecheckJaxpr(jaxpr); // sanity check
+  return { jaxpr, consts };
 }

@@ -15,9 +15,9 @@ export class JsTreeDef {
   static leaf = new JsTreeDef(NodeType.Leaf, null, []);
 
   constructor(
-    public readonly nodeType: NodeType,
-    public readonly nodeMetadata: any, // Must be comparable with deepEqual.
-    public readonly childTreedefs: JsTreeDef[]
+    readonly nodeType: NodeType,
+    readonly nodeMetadata: any, // Must be comparable with deepEqual.
+    readonly childTreedefs: JsTreeDef[]
   ) {}
 
   /** Returns a string representation of this tree definition. */
