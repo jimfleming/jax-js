@@ -4,6 +4,8 @@ import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-core/dist/public/chained_ops/register_all_chained_ops";
 import "@tensorflow/tfjs-core/dist/register_all_gradients";
 import "@tensorflow/tfjs-backend-cpu";
+import "@tensorflow/tfjs-backend-webgl";
+import "@tensorflow/tfjs-backend-webgpu";
 import { deepEqual, range, toposort, unzip2, zip } from "./utils";
 import {
   JsTreeDef,
@@ -11,6 +13,8 @@ import {
   unflatten as treeUnflatten,
 } from "./tree";
 import { PPrint } from "./pprint";
+
+tf.setBackend("webgpu"); // TODO: support multiple devices, move arrays between devices
 
 export enum DType {
   Float32 = "float32",
