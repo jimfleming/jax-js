@@ -230,17 +230,17 @@ const y = np.dot(X, np.array([1, 2])).add(3);
         const elapsed = performance.now() - start;
         consoleLines.push({
           level: "log",
-          data: [`${args[0]}: ${elapsed}ms`],
+          data: [`${args[0]}: ${elapsed.toFixed(1)}ms`],
           time: Date.now(),
         });
       }
     } else if (method === "timeEnd") {
       const start = consoleTimers.get(args[0]);
       if (start !== undefined) {
-        const elapsed = Date.now() - start;
+        const elapsed = performance.now() - start;
         consoleLines.push({
           level: "log",
-          data: [`${args[0]}: ${elapsed}ms - timer ended`],
+          data: [`${args[0]}: ${elapsed.toFixed(1)}ms - timer ended`],
           time: Date.now(),
         });
         consoleTimers.delete(args[0]);
