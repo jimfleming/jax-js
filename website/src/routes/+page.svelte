@@ -20,7 +20,7 @@
   <pre class="mb-5 text-center"><code>npm install @jax-js/core</code></pre>
 
   <p class="mb-5">
-    <code>jax-js</code> brings familiar array APIs and
+    <code>jax-js</code> brings arrays and
     <a
       class="link"
       target="_blank"
@@ -64,10 +64,10 @@
   </div>
 
   <p class="mb-5">
-    How is this possible? In short: because of modern technologies like
-    WebAssembly, WebGL, and WebGPU that give us low-level access to hardware, as
-    ML models also become smaller and faster. It still won't be quite as fast as
-    native code, but it's lightweight and easy to use.
+    How is this possible? In short: we compile operations to shaders running in
+    WebAssembly, WebGL, and WebGPU on modern browsers. These are cross-platform
+    APIs, so it won't be quite as fast as native code. But we get pretty close,
+    even as the core library is featherweight and easy to use!
   </p>
 
   <p class="mb-5">
