@@ -9,7 +9,7 @@
   </div>
 
   <p class="mb-5">
-    In 2025, most software is written in JavaScript and runs in browsers. But ML
+    In 2025, most software is written in JavaScript and runs in browsers—but ML
     libraries don't.
   </p>
 
@@ -20,7 +20,7 @@
   <p class="mb-5">
     And you had access to familiar array APIs, autograd, and linear algebra.
     This is <em>all you need</em> for neural networks (AI), physics simulations,
-    statistics, image processing, and more. No setup—just start programming.
+    statistics, image processing, and more. No setup, just start programming.
   </p>
 
   <div class="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
@@ -41,10 +41,9 @@
   <p class="mb-5">
     <code>jax-js</code> is a numerical computing library for web developers.
     Like Python libraries (NumPy, PyTorch, JAX), it's carefully hand-optimized,
-    including a JIT compiler and kernel scheduler for running on your GPU. But
-    it's also
+    including a JIT compiler and scheduler for GPU kernels. But it's also
     <strong>extremely simple and portable across the web</strong>. It runs on
-    Chrome, Firefox, Safari, iOS, Arc, and other browsers.
+    Chrome, Firefox, Safari, Arc, iOS, and Android.
   </p>
 
   <div class="mb-5 border h-48 flex items-center justify-center square-grid">
@@ -55,8 +54,8 @@
 
   <p class="mb-5">
     How is this possible? In short: because of modern technologies like
-    WebAssembly, WebGL, and WebGPU that give us fast, low-level access to
-    hardware. <span class="italic"
+    WebAssembly, WebGL, and WebGPU that give us low-level access to hardware
+    across platforms. <span class="italic"
       >(Performance benchmarks coming soon—expect <code>jax-js</code> to outperform
       TensorFlow.js and others.)</span
     >
