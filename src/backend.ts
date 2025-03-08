@@ -11,12 +11,10 @@
 
 import { WebGPUBackend } from "./backend/webgpu";
 
-export async function getBackend(backendName: string): Promise<Backend> {
+export async function getBackend(backendName: string): Promise<Backend | null> {
   if (backendName === "webgpu") {
     const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
-      throw new Error("WebGPU not supported");
-    }
+    if (!adapter) return null;
     const device = await adapter.requestDevice();
     return new WebGPUBackend(device);
   } else {
