@@ -292,7 +292,7 @@ function pipelineSubmit(
     );
   }
 
-  const len = outputs[0].size;
+  const len = outputs[0].size / 4; // TODO: Assuming 4 bytes per element
   const uniform = device.createBuffer({
     size: 4, // bytes
     usage: GPUBufferUsage.UNIFORM,
@@ -316,7 +316,7 @@ function pipelineSubmit(
   const passEncoder = commandEncoder.beginComputePass();
   passEncoder.setPipeline(pipeline);
   passEncoder.setBindGroup(0, bindGroup);
-  passEncoder.dispatchWorkgroups(Math.ceil(inputs[0].size / 64));
+  passEncoder.dispatchWorkgroups(Math.ceil(len / 64));
   passEncoder.end();
   device.queue.submit([commandEncoder.finish()]);
 }
