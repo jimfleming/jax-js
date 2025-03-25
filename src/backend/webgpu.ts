@@ -53,6 +53,8 @@ export class WebGPUBackend implements Backend {
     buffer.ref--;
     if (buffer.ref === 0) {
       this.buffers.delete(slot);
+      // The GPUBuffer.destroy() method does not actually free the memory until
+      // pending work is done.
       buffer.buffer.destroy();
     }
   }
