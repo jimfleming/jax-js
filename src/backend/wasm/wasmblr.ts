@@ -596,11 +596,11 @@ function VECTOR_OP(
   outType: string,
 ) {
   return function (this: any) {
-    for (const inType of inTypes) {
+    for (const inType of inTypes.toReversed()) {
       const actualType = this.cg.pop();
       assert(
         actualType.typeId === this.cg[inType].typeId,
-        `invalid type for ${op} (${inTypes} -> ${outType})`,
+        `invalid type for ${op} (${inTypes.join(", ")} -> ${outType})`,
       );
     }
     this.cg.emit(0xfd);
@@ -617,7 +617,7 @@ function VECTOR_OPL(
   outType: string,
 ) {
   return function (this: any, lane: number) {
-    for (const inType of inTypes) {
+    for (const inType of inTypes.toReversed()) {
       const actualType = this.cg.pop();
       assert(
         actualType.typeId === this.cg[inType].typeId,
@@ -678,7 +678,7 @@ class V128 {
 class I32x4 extends V128 {
   splat = VECTOR_OP("splat", 0x11, ["i32"], "v128");
   extract_lane = VECTOR_OPL("extract_lane", 0x1b, ["v128"], "i32");
-  replace_lane = VECTOR_OPL("replace_lane", 0x1c, ["i32", "v128"], "v128");
+  replace_lane = VECTOR_OPL("replace_lane", 0x1c, ["v128", "i32"], "v128");
 
   eq = VECTOR_OP("eq", 0x37, ["v128", "v128"], "v128");
   ne = VECTOR_OP("ne", 0x38, ["v128", "v128"], "v128");
@@ -710,7 +710,7 @@ class I32x4 extends V128 {
 class F32x4 extends V128 {
   splat = VECTOR_OP("splat", 0x13, ["f32"], "v128");
   extract_lane = VECTOR_OPL("extract_lane", 0x1f, ["v128"], "f32");
-  replace_lane = VECTOR_OPL("replace_lane", 0x20, ["f32", "v128"], "v128");
+  replace_lane = VECTOR_OPL("replace_lane", 0x20, ["v128", "f32"], "v128");
 
   eq = VECTOR_OP("eq", 0x41, ["v128", "v128"], "v128");
   ne = VECTOR_OP("ne", 0x42, ["v128", "v128"], "v128");
