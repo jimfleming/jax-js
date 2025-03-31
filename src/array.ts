@@ -147,20 +147,34 @@ export class Array {
     );
   }
 
-  /** Normalizes this array into one backed by a `Slot`. */
-  #toSlot(): Array {
-    if (!(this.#source instanceof AluExp)) return this;
-    const output = this.#backend.malloc(this.#st.size * 4);
-    const gidx = AluExp.special(DType.Int32, "gidx", this.#st.size);
-    const exp = accessorAluExp(this.#source, this.#st, gidx);
-    const pending = new Set([new PendingExecute(exp, [], [output])]);
-    return new Array(
-      output,
-      ShapeTracker.fromShape(this.shape),
-      this.dtype,
-      this.#backend,
-      pending,
-    );
+  /**
+   * Normalizes this array into one backed by a `Slot`.
+   *
+   * This mutates the array in-place, turning it into an equivalent array whose
+   * source is actual, contiguous data on device.
+   *
+   * Calling this twice is a no-op.
+   */
+  #realize(): void {
+    if (this.#source instanceof AluExp) {
+      const output = this.#backend.malloc(this.#st.size * 4);
+      const gidx = AluExp.special(DType.Int32, "gidx", this.#st.size);
+      const exp = accessorAluExp(this.#source, this.#st, gidx);
+      const pending = new Set([new PendingExecute(exp, [], [output])]);
+      this.#source = output;
+      this.#st = ShapeTracker.fromShape(this.shape);
+      this.#pending = pending;
+    } else {
+      // Only realize if the ShapeTracker is non-contiguous.
+      if (this.#st.contiguous) return;
+      const output = this.#backend.malloc(this.#st.size * 4);
+      const gidx = AluExp.special(DType.Int32, "gidx", this.#st.size);
+      const exp = accessorGlobal(0, this.#st, gidx);
+      this.#source = output;
+      this.#st = ShapeTracker.fromShape(this.shape);
+      this.#pending ??= new Set();
+      this.#pending.add(new PendingExecute(exp, [], [output]));
+    }
   }
 
   // These will be evaluation rules in the future, not public API.
@@ -175,29 +189,31 @@ export class Array {
   }
 
   async data(): Promise<Float32Array> {
-    const array = this.#toSlot();
-    if (array.#pending) {
+    this.#realize();
+    if (this.#pending) {
       // Compile all pending executables concurrently.
       await Promise.all(
-        [...array.#pending].map((exe) => exe.prepare(this.#backend)),
+        [...this.#pending].map((exe) => exe.prepare(this.#backend)),
       );
-      for (const p of array.#pending) {
+      for (const p of this.#pending) {
         p.submit(this.#backend);
       }
+      this.#pending = null;
     }
-    const buf = await this.#backend.read(array.#source as Slot);
+    const buf = await this.#backend.read(this.#source as Slot);
     return new Float32Array(buf);
   }
 
   dataSync(): Float32Array {
-    const array = this.#toSlot();
-    if (array.#pending) {
-      for (const p of array.#pending) {
+    this.#realize();
+    if (this.#pending) {
+      for (const p of this.#pending) {
         p.prepareSync(this.#backend);
         p.submit(this.#backend);
       }
+      this.#pending = null;
     }
-    const buf = this.#backend.readSync(array.#source as Slot);
+    const buf = this.#backend.readSync(this.#source as Slot);
     return new Float32Array(buf);
   }
 }
