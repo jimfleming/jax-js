@@ -59,14 +59,14 @@ export class Array {
   #source: AluExp | Slot;
   #st: ShapeTracker;
   #backend: Backend;
-  #pending: Set<PendingExecute> | null; // only if source is `Slot`
+  #pendingSet: Set<PendingExecute> | null; // only if source is `Slot`
 
   constructor(
     source: AluExp | Slot,
     st: ShapeTracker,
     dtype: DType,
     backend: Backend,
-    pending: Set<PendingExecute> | null = null,
+    pending: Iterable<PendingExecute> | null = null,
   ) {
     this.shape = st.shape;
     this.dtype = dtype;
@@ -74,7 +74,7 @@ export class Array {
     this.#source = source;
     this.#st = st;
     this.#backend = backend;
-    this.#pending = pending;
+    this.#pendingSet = new Set(pending);
   }
 
   get backend(): BackendType {
@@ -83,6 +83,20 @@ export class Array {
 
   get ndim(): number {
     return this.shape.length;
+  }
+
+  /** Get the pending executes as a list, trimming if already submitted. */
+  get #pending(): PendingExecute[] {
+    if (!this.#pendingSet) return [];
+    for (const p of this.#pendingSet) {
+      if (p.submitted) this.#pendingSet.delete(p);
+    }
+    if (this.#pendingSet.size === 0) {
+      this.#pendingSet = null;
+      return [];
+    } else {
+      return [...this.#pendingSet];
+    }
   }
 
   static zeros(
@@ -187,11 +201,11 @@ export class Array {
 
     const exp = new AluExp(op, this.dtype, src);
     const output = this.#backend.malloc(this.#st.size * 4);
-    const pending = new Set([
-      ...(this.#pending ?? []),
-      ...(other.#pending ?? []),
+    const pending = [
+      ...this.#pending,
+      ...other.#pending,
       new PendingExecute(exp, inputs, [output]),
-    ]);
+    ];
     return new Array(
       output,
       ShapeTracker.fromShape(this.shape),
@@ -217,7 +231,7 @@ export class Array {
       const pendingItem = new PendingExecute(exp, [], [output]);
       this.#source = output;
       this.#st = ShapeTracker.fromShape(this.shape);
-      this.#pending = new Set([pendingItem]);
+      this.#pendingSet = new Set([pendingItem]);
     } else {
       // Only realize if the ShapeTracker is non-contiguous.
       if (this.#st.contiguous) return;
@@ -226,8 +240,8 @@ export class Array {
       const pendingItem = new PendingExecute(exp, [this.#source], [output]);
       this.#source = output;
       this.#st = ShapeTracker.fromShape(this.shape);
-      this.#pending ??= new Set();
-      this.#pending.add(pendingItem);
+      this.#pendingSet ??= new Set();
+      this.#pendingSet.add(pendingItem);
     }
   }
 
@@ -244,15 +258,11 @@ export class Array {
 
   async data(): Promise<Float32Array> {
     this.#realize();
-    if (this.#pending) {
+    const pending = this.#pending;
+    if (pending) {
       // Compile all pending executables concurrently.
-      await Promise.all(
-        [...this.#pending].map((exe) => exe.prepare(this.#backend)),
-      );
-      for (const p of this.#pending) {
-        p.submit(this.#backend);
-      }
-      this.#pending = null;
+      await Promise.all(pending.map((exe) => exe.prepare(this.#backend)));
+      for (const p of pending) p.submit(this.#backend);
     }
     const buf = await this.#backend.read(this.#source as Slot);
     return new Float32Array(buf);
@@ -260,12 +270,9 @@ export class Array {
 
   dataSync(): Float32Array {
     this.#realize();
-    if (this.#pending) {
-      for (const p of this.#pending) {
-        p.prepareSync(this.#backend);
-        p.submit(this.#backend);
-      }
-      this.#pending = null;
+    for (const p of this.#pending) {
+      p.prepareSync(this.#backend);
+      p.submit(this.#backend);
     }
     const buf = this.#backend.readSync(this.#source as Slot);
     return new Float32Array(buf);
