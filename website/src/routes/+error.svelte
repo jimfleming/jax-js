@@ -20,7 +20,7 @@
           : "Oops! Something went wrong."}
       </p>
       <p class="text">
-        <a href="{base}/" class="underline">Return home</a>
+        <a href="{base}/" class="text-gray-500 underline">Return home</a>
       </p>
     </div>
   </div>
