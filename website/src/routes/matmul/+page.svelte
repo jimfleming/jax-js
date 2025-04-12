@@ -48,6 +48,8 @@
             maxComputeWorkgroupSizeZ: adapter.limits.maxComputeWorkgroupSizeZ,
             maxComputeWorkgroupStorageSize:
               adapter.limits.maxComputeWorkgroupStorageSize,
+            maxComputeWorkgroupsPerDimension:
+              adapter.limits.maxComputeWorkgroupsPerDimension,
             maxStorageBufferBindingSize:
               adapter.limits.maxStorageBufferBindingSize,
           },

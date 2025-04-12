@@ -63,11 +63,11 @@ async function createBackend(
     const importantLimits: Exclude<keyof GPUSupportedLimits, "__brand">[] = [
       "maxBufferSize",
       "maxComputeInvocationsPerWorkgroup",
-      "maxComputeWorkgroupSizeX", // All of our workgroups use X.
+      "maxComputeWorkgroupSizeX", // All of our workgroups use X or Y.
       "maxComputeWorkgroupSizeY",
       "maxComputeWorkgroupSizeZ",
       "maxComputeWorkgroupStorageSize",
-      "maxComputeWorkgroupsPerDimension",
+      "maxComputeWorkgroupsPerDimension", // Grid size limited to 65535 due to AMD storage in u16.
       "maxStorageBufferBindingSize",
       "maxStorageBuffersPerShaderStage",
       "maxStorageTexturesPerShaderStage",
