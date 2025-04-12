@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
+
   const n = 4096;
 
   let result: Record<string, number> = $state({});
@@ -34,22 +36,24 @@
         alert("WebGPU not supported");
         return -1;
       }
-      const device = await adapter.requestDevice({
-        requiredFeatures: ["timestamp-query"], // TODO
-        requiredLimits: {
-          maxComputeInvocationsPerWorkgroup:
-            adapter.limits.maxComputeInvocationsPerWorkgroup,
-          maxComputeWorkgroupSizeX: adapter.limits.maxComputeWorkgroupSizeX,
-          maxComputeWorkgroupSizeY: adapter.limits.maxComputeWorkgroupSizeY,
-          maxComputeWorkgroupSizeZ: adapter.limits.maxComputeWorkgroupSizeZ,
-          maxComputeWorkgroupStorageSize:
-            adapter.limits.maxComputeWorkgroupStorageSize,
-          maxStorageBufferBindingSize:
-            adapter.limits.maxStorageBufferBindingSize,
-        },
-      });
-      if (!device) {
-        alert("Failed to create device");
+
+      let device: GPUDevice;
+      try {
+        device = await adapter.requestDevice({
+          requiredLimits: {
+            maxComputeInvocationsPerWorkgroup:
+              adapter.limits.maxComputeInvocationsPerWorkgroup,
+            maxComputeWorkgroupSizeX: adapter.limits.maxComputeWorkgroupSizeX,
+            maxComputeWorkgroupSizeY: adapter.limits.maxComputeWorkgroupSizeY,
+            maxComputeWorkgroupSizeZ: adapter.limits.maxComputeWorkgroupSizeZ,
+            maxComputeWorkgroupStorageSize:
+              adapter.limits.maxComputeWorkgroupStorageSize,
+            maxStorageBufferBindingSize:
+              adapter.limits.maxStorageBufferBindingSize,
+          },
+        });
+      } catch (error) {
+        console.warn("Error when creating device:", error);
         return -1;
       }
 
@@ -684,6 +688,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
   }
 
   const strategiesList: Strategy[] = [
+    new NaiveStrategy(1),
     new NaiveStrategy(16),
     new NaiveStrategy(32),
     new ShmemTilingStrategy(16),
@@ -705,7 +710,11 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
   async function bench(variant: string) {
     console.log(`Running ${variant}...`);
     const time = await strategies[variant].run();
-    result[variant] = time;
+    if (time >= 0) {
+      result[variant] = time;
+    } else {
+      console.error(`Error running ${variant}`);
+    }
   }
 </script>
 
@@ -726,6 +735,12 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
       </button>
     {/each}
   </div>
+
+  {#if browser && !navigator.gpu}
+    <p class="text-red-500 mb-4">
+      WebGPU is not supported. Benchmarks will not work.
+    </p>
+  {/if}
 
   {#each Object.entries(result) as [variant, time]}
     <div>

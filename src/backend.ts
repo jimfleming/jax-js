@@ -54,9 +54,11 @@ async function createBackend(
     const { CPUBackend } = await import("./backend/cpu");
     return new CPUBackend();
   } else if (backendType === "webgpu") {
-    const { WebGPUBackend } = await import("./backend/webgpu");
+    if (!navigator.gpu) return null; // WebGPU is not available.
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) return null;
+
+    const { WebGPUBackend } = await import("./backend/webgpu");
 
     const importantLimits: Exclude<keyof GPUSupportedLimits, "__brand">[] = [
       "maxBufferSize",
@@ -71,14 +73,19 @@ async function createBackend(
       "maxStorageTexturesPerShaderStage",
     ];
 
-    const device = await adapter.requestDevice({
-      requiredFeatures: ["timestamp-query"],
-      requiredLimits: Object.fromEntries(
-        importantLimits.map((feature) => [feature, adapter.limits[feature]]),
-      ),
-    });
-
-    return new WebGPUBackend(device);
+    try {
+      const device = await adapter.requestDevice({
+        requiredLimits: Object.fromEntries(
+          importantLimits.map((feature) => [feature, adapter.limits[feature]]),
+        ),
+      });
+      return new WebGPUBackend(device);
+    } catch (error) {
+      // Browsers can throw a TypeError if features are not supported by the
+      // adapter, or limits have not been set properly.
+      console.error("Unexpected error requesting WebGPU device:", error);
+      return null;
+    }
   } else {
     throw new Error(`Backend not found: ${backendType}`);
   }
