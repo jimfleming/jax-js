@@ -455,8 +455,15 @@ class Local {
   }
 }
 
-function UNARY_OP(op: string, opcode: number, inType: string, outType: string) {
-  return function (this: any) {
+type TypeSpec = "i32" | "f32";
+
+function UNARY_OP(
+  op: string,
+  opcode: number,
+  inType: TypeSpec,
+  outType: TypeSpec,
+) {
+  return function (this: { cg: CodeGenerator }) {
     const t = this.cg.pop();
     assert(
       t.typeId === this.cg[inType].typeId,
@@ -470,11 +477,11 @@ function UNARY_OP(op: string, opcode: number, inType: string, outType: string) {
 function BINARY_OP(
   op: string,
   opcode: number,
-  typeA: string,
-  typeB: string,
-  outType: string,
+  typeA: TypeSpec,
+  typeB: TypeSpec,
+  outType: TypeSpec,
 ) {
-  return function (this: any) {
+  return function (this: { cg: CodeGenerator }) {
     const b = this.cg.pop();
     const a = this.cg.pop();
     assert(
@@ -486,8 +493,12 @@ function BINARY_OP(
   };
 }
 
-function LOAD_OP(op: string, opcode: number, outType: string) {
-  return function (this: any, align: number = 0, offset: number = 0) {
+function LOAD_OP(op: string, opcode: number, outType: TypeSpec) {
+  return function (
+    this: { cg: CodeGenerator },
+    align: number = 0,
+    offset: number = 0,
+  ) {
     const idxType = this.cg.pop();
     assert(idxType.typeId === this.cg.i32.typeId, `invalid type for ${op}`);
     this.cg.emit(opcode);
@@ -497,8 +508,12 @@ function LOAD_OP(op: string, opcode: number, outType: string) {
   };
 }
 
-function STORE_OP(op: string, opcode: number, inType: string) {
-  return function (this: any, align: number = 0, offset: number = 0) {
+function STORE_OP(op: string, opcode: number, inType: TypeSpec) {
+  return function (
+    this: { cg: CodeGenerator },
+    align: number = 0,
+    offset: number = 0,
+  ) {
     const valType = this.cg.pop();
     const idxType = this.cg.pop();
     assert(
@@ -619,13 +634,15 @@ class F32 {
 // Vector types (SIMD)
 ////////////////////////////////////////
 
+type VectorTypeSpec = TypeSpec | "v128";
+
 function VECTOR_OP(
   op: string,
   vopcode: number,
-  inTypes: string[],
-  outType: string,
+  inTypes: VectorTypeSpec[],
+  outType: VectorTypeSpec,
 ) {
-  return function (this: any) {
+  return function (this: { cg: CodeGenerator }) {
     for (const inType of inTypes.toReversed()) {
       const actualType = this.cg.pop();
       assert(
@@ -643,10 +660,10 @@ function VECTOR_OP(
 function VECTOR_OPL(
   op: string,
   vopcode: number,
-  inTypes: string[],
-  outType: string,
+  inTypes: VectorTypeSpec[],
+  outType: VectorTypeSpec,
 ) {
-  return function (this: any, lane: number) {
+  return function (this: { cg: CodeGenerator }, lane: number) {
     for (const inType of inTypes.toReversed()) {
       const actualType = this.cg.pop();
       assert(
