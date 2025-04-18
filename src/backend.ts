@@ -173,12 +173,16 @@ export function accessorGlobal(
   );
 }
 
-/** Expression for accessing `offset` in an array recipe. */
+/** Expression for accessing `offset` in an array recipe with variable "idx". */
 export function accessorAluExp(
   exp: AluExp,
   st: ShapeTracker,
   offset: AluExp,
 ): AluExp {
-  const [_index, valid] = st.toAluExp(unravelAlu(st.shape, offset));
-  return AluExp.where(valid, exp, AluExp.f32(0));
+  const [index, valid] = st.toAluExp(unravelAlu(st.shape, offset));
+  return AluExp.where(valid, exp.substitute({ idx: index }), AluExp.f32(0));
 }
+
+export const variables = {
+  idx: AluExp.variable(DType.Int32, "idx"),
+};

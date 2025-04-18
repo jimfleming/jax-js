@@ -7,6 +7,7 @@ import {
   Executable,
   getBackend,
   Slot,
+  variables,
 } from "../backend";
 import { ShapeTracker } from "../shape";
 import {
@@ -595,9 +596,8 @@ export function eye(
     return Array.zeros([0, numCols], { dtype, backend });
   }
 
-  const gidx = gidxVar(numRows * numCols);
   const exp = AluExp.cmplt(
-    AluExp.mod(gidx, AluExp.i32(numCols + 1)),
+    AluExp.mod(variables.idx, AluExp.i32(numCols + 1)),
     AluExp.i32(1),
   );
   return new Array(

@@ -86,6 +86,20 @@ export class AluExp {
     return AluExp.cmpne(this, AluExp.const(DType.Bool, true));
   }
 
+  /** Substitute variables in this AluExp to values. */
+  substitute(variables: Record<string, AluExp>): AluExp {
+    if (this.op === AluOp.Variable && Object.hasOwn(variables, this.arg)) {
+      if (this.dtype !== variables[this.arg].dtype) {
+        throw new Error(
+          `Type mismatch: ${this.dtype} vs ${variables[this.arg].dtype}`,
+        );
+      }
+      return variables[this.arg];
+    }
+    const src = this.src.map((x) => x.substitute(variables));
+    return new AluExp(this.op, this.dtype, src, this.arg);
+  }
+
   /** Simplify the expression by replacing any known patterns. */
   simplify(): AluExp {
     // Cache this to avoid recomputing (especially exponential blowup).
