@@ -226,11 +226,12 @@ export class AluExp {
         return context[this.arg[0]];
       case AluOp.Variable:
         return context[this.arg];
-      case AluOp.GlobalIndex:
+      case AluOp.GlobalIndex: {
         if (!globals) throw new Error("Missing globals function");
         const gid: number = this.arg;
         const bufidx = this.src[0].evaluate(context, globals);
         return globals(gid, bufidx);
+      }
       default:
         throw new Error(`Missing implemementation for ${this.op}`);
     }

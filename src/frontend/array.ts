@@ -205,7 +205,6 @@ export class Array extends Tracer {
     for (let i = 0; i < this.#st.shape.length; i++) {
       if (axis.includes(i)) {
         shiftedAxes.push(i);
-        length *= this.#st.shape[i];
       } else {
         keptAxes.push(i);
         newShape.push(this.#st.shape[i]);
@@ -458,6 +457,7 @@ export class Array extends Tracer {
         return [x.#unary(AluOp.Cos)];
       },
       [Primitive.ReduceSum]([x], { axis }: { axis: number[] }) {
+        if (axis.length === 0) return [x];
         return [x.#moveAxesDown(axis).#reduce(AluOp.Add)];
       },
       [Primitive.Greater]([x, y]) {

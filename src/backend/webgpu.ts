@@ -198,11 +198,11 @@ function pipelineSource(
   let indent = "";
   const pushIndent = Symbol("pushIndent");
   const popIndent = Symbol("popIndent");
-  const emit = (...lines: (string | Symbol)[]) => {
+  const emit = (...lines: (string | symbol)[]) => {
     for (const line of lines) {
       if (line === pushIndent) indent += "  ";
       else if (line === popIndent) indent = indent.slice(0, -2);
-      else shader.push(line ? indent + line : line);
+      else shader.push(line ? indent + (line as string) : line);
     }
   };
 
@@ -361,8 +361,6 @@ function pipelineSubmit(
     ],
   });
 
-  const workgroupSize = device.limits.maxComputeWorkgroupSizeX;
-
   const commandEncoder = device.createCommandEncoder();
   const passEncoder = commandEncoder.beginComputePass();
   passEncoder.setPipeline(pipeline);
@@ -413,7 +411,7 @@ class ShaderPipelineCache {
         });
         await this.device.popErrorScope();
         return pipeline;
-      } catch (e) {
+      } catch (_error: unknown) {
         // This can race with other compilations, but it shouldn't happen in
         // correct code. Any validation error here is a bug in `jax-js`.
         const scope = await this.device.popErrorScope();

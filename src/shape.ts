@@ -302,8 +302,8 @@ export class View {
     //    the stride is offset in v2 for one index of that dim of v1.
     //  - strides: the new strides for v1, reduced from terms
 
-    let origin = unravel(v2.shape, v1.offset); // v1 applies after v2
-    let terms: Pair[][] = rep(v2.ndim, () => []);
+    const origin = unravel(v2.shape, v1.offset); // v1 applies after v2
+    const terms: Pair[][] = rep(v2.ndim, () => []);
     const strides = rep(v1.ndim, 0);
     for (let d1 = 0; d1 < v1.strides.length; d1++) {
       const st = v1.strides[d1];
@@ -428,7 +428,7 @@ export class View {
     }
     if (arg.every(([b, e]) => b === 0 && e === 0)) return this;
     const zvarg = arg.map<Pair>(([b, e], i) => [-b, this.shape[i] + e]);
-    const mask = arg.map<Pair>(([b, e], i) => [b, this.shape[i] + b]);
+    const mask = arg.map<Pair>(([b, _e], i) => [b, this.shape[i] + b]);
     return this.#unsafeResize(zvarg, mask);
   }
 

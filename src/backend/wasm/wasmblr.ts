@@ -273,12 +273,12 @@ export class CodeGenerator {
   // Emit the complete module as an array of bytes.
   finish(): Uint8Array {
     this.#curBytes = [];
-    let emittedBytes: number[] = [];
+    const emittedBytes: number[] = [];
     concat(emittedBytes, magicModuleHeader);
     concat(emittedBytes, moduleVersion);
 
     // Type section
-    let typeSectionBytes: number[] = [];
+    const typeSectionBytes: number[] = [];
     concat(typeSectionBytes, encodeUnsigned(this.#functions.length));
     for (const f of this.#functions) {
       typeSectionBytes.push(0x60);
@@ -296,7 +296,7 @@ export class CodeGenerator {
     concat(emittedBytes, typeSectionBytes);
 
     // Import section (for memory import)
-    let importSectionBytes: number[] = [];
+    const importSectionBytes: number[] = [];
     if (this.memory.isImport) {
       // one import
       concat(importSectionBytes, encodeUnsigned(1));
@@ -321,7 +321,7 @@ export class CodeGenerator {
     }
 
     // Function section
-    let functionSectionBytes: number[] = [];
+    const functionSectionBytes: number[] = [];
     concat(functionSectionBytes, encodeUnsigned(this.#functions.length));
     for (let i = 0; i < this.#functions.length; i++) {
       concat(functionSectionBytes, encodeUnsigned(i));
@@ -331,7 +331,7 @@ export class CodeGenerator {
     concat(emittedBytes, functionSectionBytes);
 
     // Memory section (if defined locally)
-    let memorySectionBytes: number[] = [];
+    const memorySectionBytes: number[] = [];
     if (!this.memory.isImport && (this.memory.min || this.memory.max)) {
       memorySectionBytes.push(0x01); // always one memory
       if (this.memory.min && this.memory.max) {
@@ -353,7 +353,7 @@ export class CodeGenerator {
     }
 
     // Export section
-    let exportSectionBytes: number[] = [];
+    const exportSectionBytes: number[] = [];
     const numExports =
       this.#exportedFunctions.size + (this.memory.isExport ? 1 : 0);
     concat(exportSectionBytes, encodeUnsigned(numExports));
@@ -372,7 +372,7 @@ export class CodeGenerator {
     concat(emittedBytes, exportSectionBytes);
 
     // Code section
-    let codeSectionBytes: number[] = [];
+    const codeSectionBytes: number[] = [];
     concat(codeSectionBytes, encodeUnsigned(this.#functions.length));
     for (const f of this.#functions) {
       this.#curFunction = f;

@@ -11,5 +11,10 @@
     },
     "types": ["@webgpu/types", "node"]
   },
-  "exclude": ["./**/build", "./**/dist", "./**/node_modules"]
+  "exclude": [
+    "./**/build",
+    "./**/dist",
+    "./**/node_modules",
+    "./**/*.config.js"
+  ]
 }

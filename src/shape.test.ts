@@ -336,12 +336,12 @@ suite("toAluExp()", () => {
   });
 
   test("works with padding", () => {
-    let v = View.create([3, 3]).pad([
+    const v = View.create([3, 3]).pad([
       [1, 1],
       [2, 3],
     ]);
     expect(v.shape).toEqual([5, 8]);
-    let [exp, vexp] = v.toAluExp([
+    const [_exp, vexp] = v.toAluExp([
       AluExp.special(DType.Int32, "x", 5),
       AluExp.special(DType.Int32, "y", 8),
     ]);

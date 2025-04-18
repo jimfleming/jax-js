@@ -1,4 +1,4 @@
-import { AluExp, Kernel } from "../alu";
+import { Kernel } from "../alu";
 import { Backend, BackendType, Executable, Slot, SlotError } from "../backend";
 
 /** Most basic implementation of `Backend` for testing. */

@@ -499,10 +499,7 @@ export const abstractEvalRules: Record<Primitive, AbstractEvalRule> = {
       ),
     ];
   },
-  [Primitive.Broadcast](
-    [x],
-    { shape, axis }: { shape: number[]; axis: number[] },
-  ) {
+  [Primitive.Broadcast]([x], { shape }: { shape: number[]; axis: number[] }) {
     return [new ShapedArray(shape, x.dtype)];
   },
 };

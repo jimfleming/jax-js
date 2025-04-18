@@ -86,7 +86,7 @@ type MainTrace = {
   globalData: any | null;
 };
 
-let traceStack: MainTrace[] = [];
+const traceStack: MainTrace[] = []; // Global trace stack, mutable
 let dynamicTrace: MainTrace | null = null;
 
 /**

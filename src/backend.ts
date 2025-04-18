@@ -20,6 +20,15 @@ export const backendTypes: BackendType[] = ["cpu", "webgpu"];
 let defaultBackend: BackendType = "cpu";
 const initializedBackends = new Map<BackendType, Backend>();
 
+/** Set the default backend (must be initialized). */
+export function setBackend(backendType: BackendType): void {
+  if (initializedBackends.has(backendType)) {
+    defaultBackend = backendType;
+  } else {
+    throw new Error(`Backend not initialized: ${backendType}`);
+  }
+}
+
 /**
  * Initialize `jax-js` library backends.
  *

@@ -30,7 +30,7 @@ export class JsTreeDef {
         return "*";
       case NodeType.Array:
         return `[${this.childTreedefs.map((x) => x.toString(false)).join(", ")}]`;
-      case NodeType.Object:
+      case NodeType.Object: {
         const parts: string[] = [];
         for (let i = 0; i < this.childTreedefs.length; i++) {
           parts.push(
@@ -38,6 +38,7 @@ export class JsTreeDef {
           );
         }
         return `{${parts.join(", ")}}`;
+      }
     }
   }
 
@@ -105,15 +106,16 @@ export function unflatten<T>(
 
 function _unflatten<T>(treedef: JsTreeDef, leaves: Iterator<T>): JsTree<T> {
   switch (treedef.nodeType) {
-    case NodeType.Leaf:
+    case NodeType.Leaf: {
       const { value, done } = leaves.next();
       if (done) {
         throw new TypeError("Ran out of leaves while unflattening JsTree");
       }
       return value;
+    }
     case NodeType.Array:
       return treedef.childTreedefs.map((c) => _unflatten(c, leaves));
-    case NodeType.Object:
+    case NodeType.Object: {
       const obj: any = {};
       for (let i = 0; i < treedef.childTreedefs.length; i++) {
         obj[treedef.nodeMetadata[i]] = _unflatten(
@@ -122,5 +124,6 @@ function _unflatten<T>(treedef: JsTreeDef, leaves: Iterator<T>): JsTree<T> {
         );
       }
       return obj;
+    }
   }
 }
