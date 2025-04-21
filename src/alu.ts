@@ -1,9 +1,14 @@
+import { clamp } from "./utils";
+
 export enum DType {
   Float32 = "float32",
   Int32 = "int32",
   Bool = "bool",
   Complex64 = "complex64",
 }
+
+const isFloatDtype = (dtype: DType) =>
+  dtype === DType.Float32 || dtype === DType.Complex64;
 
 /**
  * Mathemtical expression on scalar values.
@@ -14,6 +19,7 @@ export enum DType {
  */
 export class AluExp {
   #simplified?: AluExp;
+  #range?: [number, number];
 
   constructor(
     readonly op: AluOp,
@@ -100,6 +106,120 @@ export class AluExp {
     return new AluExp(this.op, this.dtype, src, this.arg);
   }
 
+  #computeRange(): [number, number] {
+    if (this.#range !== undefined) return this.#range;
+
+    const src = this.src;
+    const minMax4 = (f: (a: number, b: number) => number) => {
+      const [r1, r2] = [src[0].#computeRange(), src[1].#computeRange()];
+      const values = [
+        f(r1[0], r2[0]),
+        f(r1[0], r2[1]),
+        f(r1[1], r2[0]),
+        f(r1[1], r2[1]),
+      ];
+      return [Math.min(...values), Math.max(...values)] as [number, number];
+    };
+
+    let ret: [number, number];
+    switch (this.op) {
+      case AluOp.Add:
+        ret = [src[0].min + src[1].min, src[0].max + src[1].max];
+        break;
+      case AluOp.Sub:
+        ret = [src[0].min - src[1].max, src[0].max - src[1].min];
+        break;
+      case AluOp.Mul: {
+        ret = minMax4((a, b) => a * b);
+        break;
+      }
+      case AluOp.Idiv: {
+        ret = minMax4((a, b) => Math.floor(a / b));
+        break;
+      }
+      case AluOp.Mod: {
+        // Mod is a bit tricky since it can be negative. Two behaviors:
+        //
+        // - C-style: In JS and WGSL, mod depends on the sign of the dividend.
+        // - Python-style: But in NumPy, JAX, and Python, it's based on the sign
+        //   of the divisor (% or the np.remainder function).
+        //
+        // We're going to use the C-style behavior since it's more common in the
+        // web world and outside of Python. This is a deviation from JAX!
+        let divisorRange = src[1].#computeRange();
+        if (divisorRange[0] <= 0 && divisorRange[1] >= 0) {
+          divisorRange = [0, Math.max(-divisorRange[0], divisorRange[1])];
+        }
+        const maxDivisor = isFloatDtype(this.dtype)
+          ? divisorRange[1]
+          : divisorRange[1] - 1;
+        ret = [
+          clamp(src[0].min, -maxDivisor, 0),
+          clamp(src[0].max, 0, maxDivisor),
+        ];
+        break;
+      }
+      case AluOp.Min:
+        ret = [
+          Math.min(src[0].min, src[1].min),
+          Math.min(src[0].max, src[1].max),
+        ];
+        break;
+      case AluOp.Max:
+        ret = [
+          Math.max(src[0].min, src[1].min),
+          Math.max(src[0].max, src[1].max),
+        ];
+        break;
+
+      case AluOp.Sin:
+        ret = [Math.sin(src[0].min), Math.sin(src[0].max)];
+        break;
+      case AluOp.Cos:
+        ret = [Math.cos(src[0].min), Math.cos(src[0].max)];
+        break;
+      case AluOp.Cast:
+        // Casts don't change the range, but they do change the dtype.
+        ret = [src[0].min, src[0].max];
+        break;
+
+      case AluOp.Cmplt:
+        ret = [0, 1];
+        break;
+      case AluOp.Cmpne:
+        ret = [0, 1];
+        break;
+      case AluOp.Where:
+        ret = [0, 1];
+        break;
+
+      case AluOp.Const:
+        ret = [this.arg, this.arg];
+        break;
+      case AluOp.Special:
+        ret = [0, this.arg[1] - 1];
+        break;
+
+      default:
+        ret = [-Infinity, Infinity];
+    }
+    if (isNaN(ret[0]) || isNaN(ret[1])) {
+      ret = [-Infinity, Infinity];
+    }
+    if (this.dtype === DType.Bool) {
+      ret[0] = clamp(ret[0], 0, 1);
+      ret[1] = clamp(ret[1], 0, 1);
+    }
+    this.#range = ret;
+    return ret;
+  }
+  get min(): number {
+    return this.#computeRange()[0];
+  }
+  get max(): number {
+    return this.#computeRange()[1];
+  }
+
   /** Simplify the expression by replacing any known patterns. */
   simplify(): AluExp {
     // Cache this to avoid recomputing (especially exponential blowup).
@@ -136,9 +256,59 @@ export class AluExp {
       }
     }
 
+    // Shape tracking ops (can be made more general).
+    // x % C => x
+    if (
+      op === AluOp.Mod &&
+      src[1].op === AluOp.Const &&
+      src[0].min >= 0 &&
+      src[0].max <= src[1].arg
+    ) {
+      return src[0];
+    }
+    // (...) * A + (...) % A
+    if (
+      op === AluOp.Add &&
+      src[0].op === AluOp.Mul &&
+      src[0].src[1].op === AluOp.Const &&
+      src[1].op === AluOp.Mod &&
+      src[1].src[1].op === AluOp.Const &&
+      src[0].src[1].arg === src[1].src[1].arg
+    ) {
+      const [mul, mod] = src;
+      const check = (exp: AluExp) => {
+        return (
+          exp.op === AluOp.Idiv &&
+          exp.src[1].op === AluOp.Const &&
+          exp.src[1].arg === mod.src[1].arg &&
+          exp.src[0] === mod.src[0]
+        );
+      };
+      // (x/A) * A + x % A => x
+      if (check(mul.src[0])) return mod.src[0];
+      // (x/A % B) * A + x % A => x % (A*B)
+      if (mul.src[0].op === AluOp.Mod) {
+        const [x, y] = mul.src[0].src;
+        if (check(x)) {
+          return AluExp.mod(mod.src[0], AluExp.mul(mod.src[1], y)).simplify();
+        }
+      }
+    }
+
+    // No-op comparisons.
+    if (op === AluOp.Cmplt) {
+      if (src[0].min >= src[1].max) return AluExp.const(DType.Bool, false);
+      if (src[0].max < src[1].min) return AluExp.const(DType.Bool, true);
+    }
+    if (op === AluOp.Cmpne) {
+      if (src[0].max < src[1].min || src[0].min > src[1].max)
+        return AluExp.const(DType.Bool, true);
+    }
+
     // Select statement.
     if (op === AluOp.Where) {
-      if (src[0].op === AluOp.Const) return src[src[0].arg ? 1 : 2];
+      if (src[0].min <= 0) return src[2];
+      if (src[0].max >= 1) return src[1];
     }
 
     // If any src was simplified, should construct a new expression.

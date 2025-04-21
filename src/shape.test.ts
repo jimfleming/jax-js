@@ -1,5 +1,5 @@
 import { suite, test, expect } from "vitest";
-import { ShapeTracker, View } from "./shape";
+import { ShapeTracker, unravelAlu, View } from "./shape";
 import { AluExp, DType } from "./alu";
 
 suite("View.create()", () => {
@@ -382,5 +382,22 @@ suite("toAluExp()", () => {
         i === 5 || i === 6 || i === 9 || i === 10,
       );
     }
+  });
+
+  test("simplifies common unravels", () => {
+    // Unravels are very common, they're the default case if no movement
+    // operations are applied. So we want them to be simplified.
+    const idx = AluExp.special(DType.Int32, "idx", 200);
+    let st = ShapeTracker.fromShape([10, 20]);
+    let [iexpr, vexpr] = st.toAluExp(unravelAlu(st.shape, idx));
+    expect(vexpr.resolve()).toBe(true);
+    expect(iexpr.evaluate({ idx: 50 })).toEqual(50);
+    expect(iexpr).toEqual(idx);
+
+    st = ShapeTracker.fromShape([5, 2, 20]);
+    [iexpr, vexpr] = st.toAluExp(unravelAlu(st.shape, idx));
+    expect(vexpr.resolve()).toBe(true);
+    expect(iexpr.evaluate({ idx: 50 })).toEqual(50);
+    expect(iexpr).toEqual(idx);
   });
 });

@@ -247,21 +247,22 @@ export class View {
   toAluExp(idxs: AluExp[]): [AluExp, AluExp] {
     let iexpr = AluExp.i32(this.offset);
     let vexpr = AluExp.bool(true);
-    for (let i = 0; i < this.ndim; i++) {
+    // Iterate in reverse order to make bottom-up optimizations simpler.
+    for (let i = this.ndim - 1; i >= 0; i--) {
       const idx = idxs[i];
       if (this.shape[i] !== 1 && this.strides[i] !== 0) {
-        iexpr = AluExp.add(iexpr, AluExp.mul(idx, AluExp.i32(this.strides[i])));
+        iexpr = AluExp.add(AluExp.mul(idx, AluExp.i32(this.strides[i])), iexpr);
       }
       if (this.mask) {
         if (this.mask[i][0] !== 0)
           vexpr = AluExp.mul(
-            vexpr,
             AluExp.cmplt(idx, AluExp.i32(this.mask[i][0])).not(),
+            vexpr,
           );
         if (this.mask[i][1] !== this.shape[i])
           vexpr = AluExp.mul(
-            vexpr,
             AluExp.cmplt(idx, AluExp.i32(this.mask[i][1])),
+            vexpr,
           );
       }
     }

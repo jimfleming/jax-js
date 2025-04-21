@@ -31,6 +31,11 @@ export function idiv(a: number, b: number): number {
   return Math.floor(a / b);
 }
 
+/** Clamp `x` to the range `[min, max]`. */
+export function clamp(x: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, x));
+}
+
 /** Check if two objects are deep equal. */
 export function deepEqual(a: any, b: any): boolean {
   if (a === b) {

@@ -42,3 +42,16 @@ test("AluExp handles boolean ops", () => {
   expect(AluExp.add(t, f).evaluate({})).toBe(true);
   expect(AluExp.add(f, f).evaluate({})).toBe(false);
 });
+
+test("AluExp has .min and .max", () => {
+  const e = AluExp.add(AluExp.i32(3), AluExp.i32(4));
+  expect(e.min).toEqual(7);
+  expect(e.max).toEqual(7);
+
+  const e2 = AluExp.add(
+    AluExp.special(DType.Int32, "x", 10),
+    AluExp.special(DType.Int32, "y", 20),
+  );
+  expect(e2.min).toEqual(0);
+  expect(e2.max).toEqual(28);
+});

@@ -10,7 +10,6 @@ npm test
 
 ## Next on Eric's mind
 
-- Simplify unravel shape code (`gidx` no-ops)
 - How to do optimizations?? map out the plan
 - Think about two-stage `cumsum()`
 - Think about [`Symbol.toPrimitive`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toPrimitive)
