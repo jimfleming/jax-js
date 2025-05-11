@@ -315,7 +315,7 @@ suite("toAluExp()", () => {
   test("converts View to expression", () => {
     let v = View.create([200]);
     let [exp, vexp] = v.toAluExp([AluExp.special(DType.Int32, "x", 200)]);
-    expect(vexp.resolve()).toBe(true);
+    expect(vexp.resolve()).toBe(1);
     expect(exp.evaluate({ x: 42 })).toEqual(42);
 
     v = View.create([20, 10]);
@@ -323,7 +323,7 @@ suite("toAluExp()", () => {
       AluExp.special(DType.Int32, "x", 20),
       AluExp.special(DType.Int32, "y", 10),
     ]);
-    expect(vexp.resolve()).toBe(true);
+    expect(vexp.resolve()).toBe(1);
     expect(exp.evaluate({ x: 5, y: 3 })).toEqual(53);
     expect(exp.evaluate({ x: 15, y: 3 })).toEqual(153);
 
@@ -332,7 +332,7 @@ suite("toAluExp()", () => {
       AluExp.special(DType.Int32, "x", 20),
       AluExp.special(DType.Int32, "y", 10),
     ]);
-    expect(vexp.resolve()).toBe(true);
+    expect(vexp.resolve()).toBe(1);
     expect(exp.evaluate({ x: 5, y: 3 })).toEqual(143);
     expect(exp.evaluate({ x: 15, y: 3 })).toEqual(43);
   });
@@ -347,12 +347,12 @@ suite("toAluExp()", () => {
       AluExp.special(DType.Int32, "x", 5),
       AluExp.special(DType.Int32, "y", 8),
     ]);
-    expect(vexp.evaluate({ x: 0, y: 0 })).toBe(false);
-    expect(vexp.evaluate({ x: 1, y: 0 })).toBe(false);
-    expect(vexp.evaluate({ x: 1, y: 2 })).toBe(true);
-    expect(vexp.evaluate({ x: 3, y: 4 })).toBe(true);
-    expect(vexp.evaluate({ x: 4, y: 4 })).toBe(false);
-    expect(vexp.evaluate({ x: 3, y: 5 })).toBe(false);
+    expect(vexp.evaluate({ x: 0, y: 0 })).toBe(0);
+    expect(vexp.evaluate({ x: 1, y: 0 })).toBe(0);
+    expect(vexp.evaluate({ x: 1, y: 2 })).toBe(1);
+    expect(vexp.evaluate({ x: 3, y: 4 })).toBe(1);
+    expect(vexp.evaluate({ x: 4, y: 4 })).toBe(0);
+    expect(vexp.evaluate({ x: 3, y: 5 })).toBe(0);
   });
 
   test("converts ShapeTracker to expression", () => {
@@ -380,7 +380,7 @@ suite("toAluExp()", () => {
 
     for (let i = 0; i < 16; i++) {
       expect(vexp.evaluate({ x: i })).toBe(
-        i === 5 || i === 6 || i === 9 || i === 10,
+        Number(i === 5 || i === 6 || i === 9 || i === 10),
       );
     }
   });
@@ -391,13 +391,13 @@ suite("toAluExp()", () => {
     const idx = AluExp.special(DType.Int32, "idx", 200);
     let st = ShapeTracker.fromShape([10, 20]);
     let [iexpr, vexpr] = st.toAluExp(unravelAlu(st.shape, idx));
-    expect(vexpr.resolve()).toBe(true);
+    expect(vexpr.resolve()).toBe(1);
     expect(iexpr.evaluate({ idx: 50 })).toEqual(50);
     expect(iexpr).toEqual(idx);
 
     st = ShapeTracker.fromShape([5, 2, 20]);
     [iexpr, vexpr] = st.toAluExp(unravelAlu(st.shape, idx));
-    expect(vexpr.resolve()).toBe(true);
+    expect(vexpr.resolve()).toBe(1);
     expect(iexpr.evaluate({ idx: 50 })).toEqual(50);
     expect(iexpr).toEqual(idx);
   });

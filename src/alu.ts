@@ -93,7 +93,7 @@ export class AluExp {
     return AluExp.const(DType.Float32, value);
   }
   static bool(value: boolean): AluExp {
-    return AluExp.const(DType.Bool, value);
+    return AluExp.const(DType.Bool, Number(value));
   }
 
   not(): AluExp {
@@ -448,6 +448,8 @@ export class AluExp {
    *
    * Typically you would compile the AluExp as a representation to a lower-level
    * language. This is just to define the semantics and help debug.
+   *
+   * Note that the representation of Bool is as a number (0 or 1) here.
    */
   evaluate(
     context: Record<string, any>,
@@ -458,11 +460,11 @@ export class AluExp {
       const y = this.src[1].evaluate(context, globals);
       switch (this.op) {
         case AluOp.Add:
-          return this.dtype === DType.Bool ? x || y : x + y;
+          return this.dtype === DType.Bool ? Number(x || y) : x + y;
         case AluOp.Sub:
           return x - y;
         case AluOp.Mul:
-          return this.dtype === DType.Bool ? x && y : x * y;
+          return this.dtype === DType.Bool ? Number(x && y) : x * y;
         case AluOp.Idiv:
           return Math.trunc(x / y); // Consistent with signed Mod.
         case AluOp.Mod:
@@ -488,9 +490,9 @@ export class AluExp {
         case AluOp.Cos:
           return Math.cos(x);
         case AluOp.Cast:
-          if (this.dtype === DType.Int32) return Math.floor(Number(x));
-          else if (this.dtype === DType.Float32) return Number(x);
-          else if (this.dtype === DType.Bool) return Boolean(x);
+          if (this.dtype === DType.Int32) return Math.floor(x);
+          else if (this.dtype === DType.Float32) return x;
+          else if (this.dtype === DType.Bool) return Number(Boolean(x));
           else throw new Error(`Unsupported cast to ${this.dtype}`);
         default:
           throw new Error(`Missing implemementation for ${this.op}`);
@@ -553,7 +555,9 @@ export class AluExp {
     return this.fold<string>((node, parts) => {
       switch (node.op) {
         case AluOp.Const:
-          return "" + node.arg;
+          return (
+            "" + (node.dtype === DType.Bool ? Boolean(node.arg) : node.arg)
+          );
 
         case AluOp.Variable:
           return `$${node.arg}:${node.dtype}`;

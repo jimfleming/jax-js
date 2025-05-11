@@ -37,11 +37,13 @@ test("AluExp handles boolean ops", () => {
   const t = AluExp.bool(true);
   const f = AluExp.bool(false);
 
-  expect(AluExp.mul(t, t).evaluate({})).toBe(true);
-  expect(AluExp.mul(t, f).evaluate({})).toBe(false);
+  expect(AluExp.mul(t, t).evaluate({})).toBe(1);
+  expect(AluExp.mul(t, f).evaluate({})).toBe(0);
+  expect(AluExp.mul(f, f).evaluate({})).toBe(0);
 
-  expect(AluExp.add(t, f).evaluate({})).toBe(true);
-  expect(AluExp.add(f, f).evaluate({})).toBe(false);
+  expect(AluExp.add(t, t).evaluate({})).toBe(1);
+  expect(AluExp.add(t, f).evaluate({})).toBe(1);
+  expect(AluExp.add(f, f).evaluate({})).toBe(0);
 });
 
 test("AluExp has .min and .max", () => {
