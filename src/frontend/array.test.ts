@@ -56,6 +56,19 @@ suite.each(backendTypes)("backend:%s", (backend) => {
     );
   });
 
+  test("flatten and ravel", () => {
+    const a = array([
+      [
+        [1, 2],
+        [3, 4],
+      ],
+    ]); // 3D
+    expect(a.shape).toEqual([1, 2, 2]);
+    expect(a.flatten().js()).toEqual([1, 2, 3, 4]);
+    expect(a.ravel().js()).toEqual([1, 2, 3, 4]);
+    expect(array(3).flatten().js()).toEqual([3]);
+  });
+
   test("can add array to itself", () => {
     const a = array([1, 2, 3]);
     // Make sure duplicate references don't trip up the backend.

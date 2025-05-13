@@ -154,6 +154,11 @@ export const permuteDims = transpose;
 // Version of pureArray with fudged types.
 const fudgeArray = pureArray as (x: ArrayLike) => Array;
 
+/** Return a 1-D flattened array containing the elements of the input. */
+export function ravel(a: ArrayLike): Array {
+  return fudgeArray(a).ravel();
+}
+
 /**
  * Return specified diagonals.
  *
