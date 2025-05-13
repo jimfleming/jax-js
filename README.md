@@ -1,4 +1,56 @@
-# jax-js
+# jax-js: JAX in pure JavaScript
+
+[Website](https://www.ekzhang.com/jax-js/)
+
+This is a machine learning framework for the browser. It aims to bring JAX-style, high-performance
+CPU and GPU kernels to JavaScript, so you can run numerical applications on the web.
+
+```bash
+npm i @jax-js/jax
+```
+
+Under the hood, it translates array calls into an IR, then synthesizes kernels using WebAssembly
+and WebGPU.
+
+## Quickstart
+
+You can use `jax-js` as an array API, just like NumPy.
+
+```js
+import { numpy as np } from "@jax-js/jax";
+
+// Array operations, compatible with NumPy.
+const x = np.array([1, 2, 3]);
+const y = x.mul(4); // [4, 8, 12]
+```
+
+It also lets you take derivatives like in JAX. (JIT support is coming soon.)
+
+```js
+import { grad, numpy as np } from "@jax-js/jax";
+
+// Calculate derivatives with reverse-mode AD.
+const norm = (a) => a.mul(a).sum();
+
+const x = np.array([1, 2, 3]);
+const xnorm = norm(x); // 1^2 + 2^2 + 3^2 = 14
+const xgrad = grad(norm)(x); // [2, 4, 6]
+```
+
+The default backend runs on CPU, but on [supported browsers](https://caniuse.com/webgpu),
+you can switch to GPU for maximum performance.
+
+```js
+import { numpy as np, setBackend } from "@jax-js/jax";
+
+// Change the default backend to GPU.
+setBackend("webgpu");
+
+const x = np.ones([4096, 4096]);
+const y = x.matmul(x); // JIT-compiled into a GPU kernel
+```
+
+## Development
 
 Under construction.
 
