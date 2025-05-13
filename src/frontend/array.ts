@@ -108,10 +108,6 @@ export class Array extends Tracer {
     return this.#backend.type;
   }
 
-  get ndim(): number {
-    return this.shape.length;
-  }
-
   /** Return a simple string representation of the array's dimensions. */
   toString(): string {
     return `Array:${this.#dtype}[${this.shape.join(",")}]`;

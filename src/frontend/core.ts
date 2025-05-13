@@ -186,6 +186,10 @@ export abstract class Tracer {
     return this.aval.dtype;
   }
 
+  get ndim(): number {
+    return this.shape.length;
+  }
+
   fullLower(): Tracer {
     return this; // default implementation
   }
