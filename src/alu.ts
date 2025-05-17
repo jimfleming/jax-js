@@ -1,6 +1,5 @@
-import { FpHash } from "./hash";
 import { ShapeTracker } from "./shape";
-import { clamp, strip1 } from "./utils";
+import { clamp, FpHash, strip1 } from "./utils";
 
 export enum DType {
   Float32 = "float32",
