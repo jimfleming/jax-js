@@ -293,7 +293,9 @@ export function tuneWebgpu(kernel: Kernel): TuneResult {
   }
 
   // Try to do loop unrolling on the reduce axis, with an upcast limit.
+  // Only do this on non-mobile devices.
   if (
+    !/mobile|android|ipad|iphone|opera mini/i.test(navigator.userAgent) &&
     dim.reduce < dim.unroll &&
     (prod(dim.st.shape.slice(dim.unroll)) <= 4 ||
       (dim.unroll === dim.upcast && prod(dim.st.shape.slice(dim.upcast)) < 64))
