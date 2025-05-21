@@ -62,6 +62,7 @@ npm test
 
 ## Next on Eric's mind
 
+- Write tests for jvp-of-jit, grad-of-jit, + implement jit-of-jit
 - How many threads to create per workgroup, depends on hardware
 - Think about two-stage `cumsum()`
 - Disposal by enforcing a `.ref` getter? This isn't included in console.log, but it's included in `{...spread}` syntax, hopefully not used often with arrays.
