@@ -293,9 +293,9 @@ export function tuneWebgpu(kernel: Kernel): TuneResult {
   }
 
   // Try to do loop unrolling on the reduce axis, with an upcast limit.
-  // Only do this on non-mobile devices.
+  // Only do this on Chrome/Blink, other WebGPU implementations seem worse right now.
   if (
-    !/mobile|android|ipad|iphone|opera mini/i.test(navigator.userAgent) &&
+    /chrome/i.test(navigator.userAgent) &&
     dim.reduce < dim.unroll &&
     (prod(dim.st.shape.slice(dim.unroll)) <= 4 ||
       (dim.unroll === dim.upcast && prod(dim.st.shape.slice(dim.upcast)) < 64))
