@@ -42,14 +42,20 @@ export class AluExp {
   static idiv(a: AluExp, b: AluExp): AluExp {
     return new AluExp(AluOp.Idiv, a.dtype, [a, b]);
   }
+  static mod(a: AluExp, b: AluExp): AluExp {
+    return new AluExp(AluOp.Mod, a.dtype, [a, b]);
+  }
   static min(a: AluExp, b: AluExp): AluExp {
     return new AluExp(AluOp.Min, a.dtype, [a, b]);
   }
   static max(a: AluExp, b: AluExp): AluExp {
     return new AluExp(AluOp.Max, a.dtype, [a, b]);
   }
-  static mod(a: AluExp, b: AluExp): AluExp {
-    return new AluExp(AluOp.Mod, a.dtype, [a, b]);
+  static sin(a: AluExp): AluExp {
+    return new AluExp(AluOp.Sin, a.dtype, [a]);
+  }
+  static cos(a: AluExp): AluExp {
+    return new AluExp(AluOp.Cos, a.dtype, [a]);
   }
   static cast(dtype: DType, a: AluExp): AluExp {
     if (a.dtype === dtype) return a;
@@ -125,6 +131,25 @@ export class AluExp {
           );
         }
         return variables[exp.arg];
+      }
+    });
+  }
+
+  /** Reindex gid values in this expression as needed. */
+  reindexGids(gidMap: Map<number, number>): AluExp {
+    return this.rewrite((exp) => {
+      if (exp.op === AluOp.GlobalIndex) {
+        const gid = exp.arg as number;
+        const newGid = gidMap.get(gid);
+        if (newGid !== undefined && newGid !== gid) {
+          return AluExp.globalIndex(exp.dtype, newGid, exp.src[0]);
+        }
+      } else if (exp.op === AluOp.GlobalView) {
+        const gid = exp.arg[0] as number;
+        const newGid = gidMap.get(gid);
+        if (newGid !== undefined && newGid !== gid) {
+          return AluExp.globalView(exp.dtype, newGid, exp.arg[1], exp.src);
+        }
       }
     });
   }
@@ -712,22 +737,17 @@ export class Kernel {
     /** Expression to be evaluated. */
     readonly exp: AluExp,
     /** Optional reduction to be performed. */
-    readonly reduction?: Reduction,
+    readonly reduction?: Reduction, // TODO: Currently not used except in tests.
   ) {
     this.exp = exp.simplify();
   }
 
-  /** Unique string representation of this object, usable as a map key. */
-  toString() {
-    JSON.stringify(this, (_key, value) => {
-      // Make sure that we sort the keys alphabetically for determinism.
-      if (value instanceof Object && !(value instanceof Array)) {
-        return Object.fromEntries(
-          Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
-        );
-      }
-      return value;
-    });
+  getHash(): bigint {
+    const hasher = new FpHash();
+    hasher.update(BigInt(this.nargs), BigInt(this.size));
+    hasher.update(this.exp.getHash());
+    hasher.update(this.reduction?.getHash());
+    return hasher.value;
   }
 }
 
@@ -760,6 +780,13 @@ export class Reduction {
     if (!AluGroup.Reduce.has(op)) {
       throw new TypeError(`Unsupported reduction: ${op}`);
     }
+  }
+
+  getHash(): bigint {
+    const hasher = new FpHash();
+    hasher.update(this.dtype, this.op, BigInt(this.size));
+    hasher.update(this.fusion.getHash());
+    return hasher.value;
   }
 
   /** Get the identity for this reduction operation. */

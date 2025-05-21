@@ -702,6 +702,23 @@ export class ShapeTracker {
         : this.views.toSpliced(this.views.length - 1, 1, newView),
     );
   }
+
+  // Below this line are "composite" operations.
+
+  /** Broadcast along the given new axes, then expand the shape. */
+  broadcast(newShape: number[], axis: number[]): ShapeTracker {
+    let st = this as ShapeTracker;
+    if (axis.length > 0) {
+      // First, unsqueeze each dimension of "axis".
+      const unsqueezed = [...st.shape];
+      for (const i of axis.toSorted()) {
+        unsqueezed.splice(i, 0, 1);
+      }
+      st = st.reshape(unsqueezed);
+    }
+    // Then, expand the data to the new shape.
+    return st.expand(newShape);
+  }
 }
 
 function applyLast<T>(ar: T[], f: (x: T) => T): T[] {

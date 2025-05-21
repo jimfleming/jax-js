@@ -3,7 +3,7 @@
 import { DType } from "../alu";
 import { flatten as treeFlatten, unflatten as treeUnflatten } from "../tree";
 import { invertPermutation, toposort, unzip2, zip } from "../utils";
-import { pureArray, zeros } from "./array";
+import { pureArray, scalar, zeros } from "./array";
 import {
   AbstractValue,
   add,
@@ -384,7 +384,7 @@ function evalJaxprTransposed(
     // values. Tricky!
     const primalsIn = eqn.inputs.map((v) =>
       v instanceof Lit
-        ? v.val
+        ? scalar(v.value, { dtype: v.dtype }) // TODO: Use correct backend
         : (knownPrimals.get(v) ?? new UndefPrimal(v.aval)),
     );
     const cotangentsOut = eqn.outBinders.map(readCotangent);

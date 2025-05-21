@@ -1,8 +1,14 @@
 import { DType } from "../alu";
+import { ArrayLike } from "../numpy";
 import { PPrint } from "../pprint";
-import { JsTreeDef, flatten as treeFlatten } from "../tree";
+import {
+  JsTreeDef,
+  MapJsTree,
+  flatten as treeFlatten,
+  unflatten as treeUnflatten,
+} from "../tree";
 import { unzip2, zip } from "../utils";
-import { Array, generalBroadcast, pureArray } from "./array";
+import { Array, generalBroadcast, pureArray, scalar } from "./array";
 import {
   bind,
   flattenFun,
@@ -20,54 +26,79 @@ import {
 
 /** Variable in a Jaxpr expression. */
 export class Var {
-  static nextId = 1; // For debugging, since JavaScript has no id() function like Python.
-
-  static resetIdCounter() {
-    Var.nextId = 1;
-  }
+  static #nextId = 1; // For debugging, since JavaScript has no id() function like Python.
 
   readonly id: number;
   readonly aval: ShapedArray;
 
   constructor(aval: ShapedArray) {
-    this.id = Var.nextId++;
+    this.id = Var.#nextId++;
     this.aval = aval;
   }
 
-  get name() {
-    return `v_${this.id}`;
-  }
-
   toString(): string {
-    return `${this.name}:${this.aval.strShort()}`;
+    return `Var(${this.id}):${this.aval.strShort()}`;
   }
 }
 
-/** Literal in a Jaxpr expression. */
+/** Literal in a Jaxpr expressio. Currently, only scalars are supported. */
 export class Lit {
-  readonly val: Array;
+  readonly dtype: DType;
+  readonly value: number;
   readonly aval: ShapedArray;
 
-  constructor(val: Array | number | boolean) {
-    this.aval = ShapedArray.fromAval(getAval(val));
-    const ar = pureArray(val);
-    if (ndim(ar) !== 0 || !(ar instanceof Array)) {
-      throw new TypeError("Lit only supports scalar Array values");
-    }
-    this.val = ar;
-  }
-
-  get value(): number | boolean {
-    return this.val.dataSync()[0];
+  constructor(dtype: DType, value: number) {
+    this.dtype = dtype;
+    this.value = value;
+    this.aval = new ShapedArray([], dtype);
   }
 }
 
 export type Atom = Var | Lit;
 
-function atomIsLit(atom: Atom, literal?: number | boolean) {
+function atomIsLit(
+  atom: Atom,
+  literal?: number | boolean,
+): atom is Lit & boolean {
   return (
     atom instanceof Lit && (literal === undefined || atom.value === literal)
   );
+}
+
+class VarPrinter {
+  names: Map<Var, string> = new Map();
+  #next = "a";
+
+  // a, b, c, ..., z, aa, ab, ..., az, ba, bb, ...
+  #advance() {
+    const ret = this.#next;
+    let lastNonz = this.#next.length - 1;
+    while (lastNonz >= 0 && this.#next[lastNonz] === "z") {
+      lastNonz--;
+    }
+    if (lastNonz < 0) {
+      this.#next = "a".repeat(this.#next.length + 1);
+    } else {
+      let result = this.#next.slice(0, lastNonz);
+      result += String.fromCharCode(this.#next.charCodeAt(lastNonz) + 1);
+      result += "a".repeat(this.#next.length - 1 - lastNonz);
+      this.#next = result;
+    }
+    return ret;
+  }
+
+  name(v: Var): string {
+    if (this.names.has(v)) {
+      return this.names.get(v)!;
+    }
+    const name = this.#advance();
+    this.names.set(v, name);
+    return name;
+  }
+
+  nameType(v: Var): string {
+    return `${this.name(v)}:${v.aval.strShort()}`;
+  }
 }
 
 /** A single statement / binding in a Jaxpr, in ANF form. */
@@ -79,10 +110,10 @@ export class JaxprEqn {
     readonly outBinders: Var[],
   ) {}
 
-  pprint(usedVars?: Set<Var>): PPrint {
+  pprint(usedVars?: Set<Var>, vp = new VarPrinter()): PPrint {
     const lhs = PPrint.pp(
       this.outBinders
-        .map((v) => (!usedVars || usedVars.has(v) ? v : "_"))
+        .map((v) => (!usedVars || usedVars.has(v) ? vp.nameType(v) : "_"))
         .join(" "),
     );
     let rhs = PPrint.pp(this.primitive);
@@ -102,7 +133,7 @@ export class JaxprEqn {
     rhs = rhs.stack(
       PPrint.pp(
         this.inputs
-          .map((x) => (x instanceof Var ? x.name : JSON.stringify(x.val.js())))
+          .map((x) => (x instanceof Var ? vp.name(x) : JSON.stringify(x.value)))
           .join(" "),
       ),
     );
@@ -123,17 +154,18 @@ export class Jaxpr {
   ) {}
 
   pprint(): PPrint {
+    const vp = new VarPrinter();
     const usedVars = new Set<Var>(
       [...this.outs, ...this.eqns.flatMap((eqn) => eqn.inputs)].filter(
         (x) => x instanceof Var,
       ),
     );
-    const inBinders = this.inBinders.map((v) => v.toString()).join(", ");
+    const inBinders = this.inBinders.map((v) => vp.nameType(v)).join(", ");
     const eqns = PPrint.prototype.concat(
-      ...this.eqns.map((e) => e.pprint(usedVars)),
+      ...this.eqns.map((e) => e.pprint(usedVars, vp)),
     );
     const outs = this.outs
-      .map((x) => (x instanceof Var ? x.name : x.val.js()))
+      .map((x) => (x instanceof Var ? vp.name(x) : x.value))
       .join(", ");
     return PPrint.pp(`{ lambda ${inBinders} .`).concat(
       (this.eqns.length
@@ -171,7 +203,15 @@ export class Jaxpr {
         } else if (atomIsLit(b, 0)) {
           context.set(c, a);
         } else if (atomIsLit(a) && atomIsLit(b)) {
-          context.set(c, new Lit((a as any).value + (b as any).value));
+          context.set(
+            c,
+            new Lit(
+              a.dtype,
+              a.dtype === DType.Bool
+                ? Math.min(a.value + b.value, 1) // Special case: Bool ||
+                : a.value + b.value,
+            ),
+          );
         } else {
           newEqns.push(eqn);
         }
@@ -184,7 +224,7 @@ export class Jaxpr {
         } else if (atomIsLit(b, 1)) {
           context.set(c, a);
         } else if (atomIsLit(a) && atomIsLit(b)) {
-          context.set(c, new Lit((a as any).value * (b as any).value));
+          context.set(c, new Lit(a.dtype, a.value * b.value));
         } else {
           newEqns.push(eqn);
         }
@@ -277,7 +317,9 @@ function typecheckAtom(env: Set<Var>, x: Atom): ShapedArray {
 export function evalJaxpr(jaxpr: Jaxpr, args: Tracer[]): Tracer[] {
   const env = new Map<Var, Tracer>();
 
-  const read = (x: Atom) => (x instanceof Var ? env.get(x)! : x.val);
+  // TODO: Use correct backend when constructing scalar() here.
+  const read = (x: Atom) =>
+    x instanceof Var ? env.get(x)! : scalar(x.value, { dtype: x.dtype });
   const write = (v: Var, val: Tracer) => {
     if (env.has(v)) throw new Error(`Variable already bound: ${v}`);
     env.set(v, val);
@@ -426,7 +468,8 @@ function _inlineLiterals(jaxpr: Jaxpr, consts: Tracer[]): [Jaxpr, Tracer[]] {
 
   for (let i = 0; i < consts.length; i++) {
     if (ndim(consts[i]) === 0 && consts[i] instanceof Array) {
-      literals.set(jaxpr.inBinders[i], new Lit(consts[i] as any));
+      const ar = consts[i] as Array;
+      literals.set(jaxpr.inBinders[i], new Lit(ar.dtype, ar.dataSync()[0]));
     } else {
       constBinders.push(jaxpr.inBinders[i]);
       newConsts.push(consts[i]);
@@ -452,7 +495,7 @@ function _inlineLiterals(jaxpr: Jaxpr, consts: Tracer[]): [Jaxpr, Tracer[]] {
   return [newJaxpr, newConsts];
 }
 
-type AbstractEvalRule = (shapes: ShapedArray[], params: any) => ShapedArray[];
+type AbstractEvalRule = (avals: ShapedArray[], params: any) => ShapedArray[];
 
 function binopAbstractEval([x, y]: ShapedArray[]) {
   if (!(x instanceof ShapedArray) || !(y instanceof ShapedArray)) {
@@ -545,7 +588,6 @@ export function makeJaxpr(
     const [avalsIn, inTree] = treeFlatten(argsIn);
     const [fFlat, outTree] = flattenFun(f, inTree);
 
-    Var.resetIdCounter(); // Reset the counter for each new Jaxpr trace.
     const builder = new JaxprBuilder();
     using main = newMain(JaxprTrace, builder);
     using _dynamic = newDynamic(main);
@@ -565,4 +607,27 @@ export function makeJaxpr(
     }
     return { jaxpr: jaxpr.simplify(), consts, treedef: outTree.value };
   };
+}
+
+export function jit<F extends (...args: any[]) => any>(
+  f: F,
+): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F> {
+  return ((...args) => {
+    const [argsFlat, inTree] = treeFlatten(args);
+
+    const avalsInFlat = argsFlat.map((x) => ShapedArray.fromAval(getAval(x)));
+    const avalsIn = treeUnflatten(inTree, avalsInFlat);
+
+    const {
+      jaxpr,
+      consts,
+      treedef: outTree,
+    } = makeJaxpr(f)(...(avalsIn as any[]));
+
+    const outs = bind(Primitive.JitCall, [...consts, ...argsFlat], {
+      jaxpr,
+      numConsts: consts.length,
+    });
+    return treeUnflatten(outTree, outs);
+  }) as F;
 }

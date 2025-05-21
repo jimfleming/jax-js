@@ -147,7 +147,7 @@ export interface Backend {
   /**
    * Run a backend operation that was previously prepared.
    *
-   * The operation may not run immedaitely, but operations are guaranteed to run
+   * The operation may not run immediately, but operations are guaranteed to run
    * in the dispatch order. Also, `read()` will wait for all pending operations
    * on that slot to finish.
    */

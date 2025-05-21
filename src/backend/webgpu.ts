@@ -3,9 +3,12 @@ import { Backend, BackendType, Executable, Slot, SlotError } from "../backend";
 import { tuneWebgpu } from "../tuner";
 import { DEBUG, findPow2, strip1 } from "../utils";
 
-type ShaderDispatch = {
-  shader: string; // informational
+type ShaderInfo = {
+  shader: string;
   grid: [number, number];
+};
+
+type ShaderDispatch = ShaderInfo & {
   pipeline: GPUComputePipeline;
 };
 
@@ -17,6 +20,8 @@ export class WebGPUBackend implements Backend {
   readonly syncReader: SyncReader;
   readonly buffers: Map<Slot, { ref: number; buffer: GPUBuffer }>;
   nextSlot: number;
+
+  #cachedShaderMap = new Map<bigint, ShaderInfo>();
 
   constructor(readonly device: GPUDevice) {
     if (DEBUG >= 3) {
@@ -96,14 +101,24 @@ export class WebGPUBackend implements Backend {
     return this.syncReader.read(buffer, start, count);
   }
 
+  #cachedShader(kernel: Kernel): ShaderInfo {
+    const cacheKey = kernel.getHash();
+    let result = this.#cachedShaderMap.get(cacheKey);
+    if (!result) {
+      result = pipelineSource(this.device, kernel);
+      this.#cachedShaderMap.set(cacheKey, result);
+    }
+    return result;
+  }
+
   async prepare(kernel: Kernel): Promise<Executable<ShaderDispatch>> {
-    const { shader, grid } = pipelineSource(this.device, kernel);
+    const { shader, grid } = this.#cachedShader(kernel);
     const pipeline = await this.pipelines.prepare(shader);
     return new Executable(kernel, { shader, grid, pipeline });
   }
 
   prepareSync(kernel: Kernel): Executable<ShaderDispatch> {
-    const { shader, grid } = pipelineSource(this.device, kernel);
+    const { shader, grid } = this.#cachedShader(kernel);
     const pipeline = this.pipelines.prepareSync(shader);
     return new Executable(kernel, { shader, grid, pipeline });
   }
@@ -184,10 +199,7 @@ function constToWgsl(dtype: DType, value: any): string {
  * Returns the shader source and the number of workgroups to dispatch along x
  * and y axes, to run the kernel.
  */
-function pipelineSource(
-  device: GPUDevice,
-  kernel: Kernel,
-): { shader: string; grid: [number, number] } {
+function pipelineSource(device: GPUDevice, kernel: Kernel): ShaderInfo {
   const tune = tuneWebgpu(kernel);
   if (DEBUG >= 3) {
     console.info(`kernel.exp: ${kernel.exp}\ntune.exp: ${tune.exp}`);

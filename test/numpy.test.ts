@@ -228,4 +228,73 @@ suite.each(backendTypes)("backend:%s", (backend) => {
       ]);
     });
   });
+
+  suite("jax.numpy.matmul()", () => {
+    test("computes 2x2 matmul", () => {
+      const x = np.array([
+        [1, 2],
+        [3, 4],
+      ]);
+      const y = np.array([
+        [5, 6],
+        [7, 8],
+      ]);
+      const z = np.matmul(x, y);
+      expect(z.js()).toEqual([
+        [19, 22],
+        [43, 50],
+      ]);
+    });
+
+    test("computes 2x3 matmul", () => {
+      const x = np.array([
+        [1, 2, 3],
+        [4, 5, 6],
+      ]);
+      const y = np.array([
+        [7, 8],
+        [9, 10],
+        [11, 12],
+      ]);
+      const z = np.matmul(x, y);
+      expect(z.js()).toEqual([
+        [58, 64],
+        [139, 154],
+      ]);
+    });
+
+    test("computes stacked 3x3 matmul", () => {
+      const a = np.array([
+        [
+          [1, 2, 3],
+          [4, 5, 6],
+          [7, 8, 9],
+        ],
+        [
+          [10, 11, 12],
+          [13, 14, 15],
+          [16, 17, 18],
+        ],
+      ]);
+      const b = np.array([
+        [20, 21, 22],
+        [23, 24, 25],
+        [26, 27, 28],
+      ]);
+      const c = np.matmul(a, b);
+      expect(c.shape).toEqual([2, 3, 3]);
+      expect(c.js()).toEqual([
+        [
+          [144, 150, 156],
+          [351, 366, 381],
+          [558, 582, 606],
+        ],
+        [
+          [765, 798, 831],
+          [972, 1014, 1056],
+          [1179, 1230, 1281],
+        ],
+      ]);
+    });
+  });
 });

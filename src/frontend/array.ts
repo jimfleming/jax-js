@@ -14,10 +14,10 @@ import {
   deepEqual,
   isPermutation,
   prod,
+  range,
   RecursiveArray,
   recursiveFlatten,
   rep,
-  repeat,
 } from "../utils";
 import {
   CompareOp,
@@ -30,10 +30,11 @@ import {
   TracerValue,
 } from "./core";
 import { Jaxpr } from "./jaxpr";
+import { jitCompile } from "./jit";
 
 const JsArray = globalThis.Array;
 
-class PendingExecute {
+export class PendingExecute {
   prepared: Executable | null = null;
   submitted = false;
   #promise: Promise<void> | null = null; // for prepare
@@ -81,6 +82,9 @@ type DTypeAndBackend = { dtype?: DType; backend?: BackendType };
  * "Array" type by name.
  */
 export class Array extends Tracer {
+  static #nextId = 1001; // For unique hashing where needed.
+
+  id: number;
   #dtype: DType;
   #source: AluExp | Slot;
   #st: ShapeTracker;
@@ -95,6 +99,7 @@ export class Array extends Tracer {
     pending: Iterable<PendingExecute> | null = null,
   ) {
     super(baseArrayTrace);
+    this.id = Array.#nextId++;
     this.#dtype = dtype;
     this.#source = source;
     this.#st = st;
@@ -254,9 +259,7 @@ export class Array extends Tracer {
     arrays = arrays.map((ar) => {
       if (deepEqual(ar.shape, newShape)) return ar;
       return ar.#reshape(
-        ar.#st
-          .reshape(repeat(1, newShape.length - ar.ndim).concat(ar.shape))
-          .expand(newShape),
+        ar.#st.broadcast(newShape, range(newShape.length - ar.ndim)),
       );
     });
 
@@ -452,26 +455,7 @@ export class Array extends Tracer {
         return [x.#moveAxesDown(axis).#reduce(AluOp.Add)];
       },
       [Primitive.Compare]([x, y], { op }: { op: CompareOp }) {
-        const custom = ([x, y]: AluExp[]) => {
-          switch (op) {
-            case CompareOp.Greater:
-              // `x > y` is equivalent to `x != y && !(x < y)`
-              // TODO: handle NaN
-              return AluExp.mul(AluExp.cmpne(x, y), AluExp.cmplt(x, y).not());
-            case CompareOp.Less:
-              return AluExp.cmplt(x, y);
-            case CompareOp.Equal:
-              return AluExp.cmpne(x, y).not();
-            case CompareOp.NotEqual:
-              return AluExp.cmpne(x, y);
-            case CompareOp.GreaterEqual:
-              // `x >= y` is equivalent to `!(x < y)`
-              // TODO: handle NaN
-              return AluExp.cmplt(x, y).not();
-            case CompareOp.LessEqual:
-              return AluExp.add(AluExp.cmplt(x, y), AluExp.cmpne(x, y).not());
-          }
-        };
+        const custom = ([x, y]: AluExp[]) => aluCompare(x, y, op);
         return [Array.#naryCustom("compare", custom, [x, y], [], DType.Bool)];
       },
       [Primitive.Where]([cond, x, y]) {
@@ -485,17 +469,7 @@ export class Array extends Tracer {
         [x],
         { shape, axis }: { shape: number[]; axis: number[] },
       ) {
-        let st = x.#st;
-        if (axis.length > 0) {
-          // First, unsqueeze each dimension of "axis".
-          const unsqueezed = [...x.#st.shape];
-          for (const i of axis.toSorted()) {
-            unsqueezed.splice(i, 0, 1);
-          }
-          st = st.reshape(unsqueezed);
-        }
-        // Then, expand the data to the new shape.
-        return [x.#reshape(st.expand(shape))];
+        return [x.#reshape(x.#st.broadcast(shape, axis))];
       },
       [Primitive.Reshape]([x], { shape }: { shape: number[] }) {
         return [x.#reshape(x.#st.reshape(shape))];
@@ -509,12 +483,31 @@ export class Array extends Tracer {
         args,
         { jaxpr, numConsts }: { jaxpr: Jaxpr; numConsts: number },
       ) {
+        const backend = getBackend(); // TODO: Use correct backend.
         const consts = args.slice(0, numConsts);
         const tracers = args.slice(numConsts);
-        void [jaxpr, consts, tracers];
-        throw new Error("TODO: JitCall evaluation");
+        const jp = jitCompile(backend, jaxpr, consts);
+        const { outputs, pending } = jp.execute(
+          tracers.map((x) => x._realizeSource()),
+        );
+        pending.push(...tracers.flatMap((x) => x.#pending));
+        return outputs.map((source, i) => {
+          return new Array(
+            source,
+            ShapeTracker.fromShape(jaxpr.outs[i].aval.shape),
+            jaxpr.outs[i].aval.dtype,
+            backend,
+            pending,
+          );
+        });
       },
     };
+  }
+
+  // Internal methods, not public API. Do not use.
+  _realizeSource() {
+    this.#realize();
+    return this.#source as number; // Because #realize() was called.
   }
 }
 
@@ -764,6 +757,28 @@ export function identity(
   { dtype, backend }: DTypeAndBackend = {},
 ): Array {
   return eye(n, n, { dtype, backend });
+}
+
+/** Translate a `CompareOp` into an `AluExp` on two sub-expressions. */
+export function aluCompare(a: AluExp, b: AluExp, op: CompareOp): AluExp {
+  switch (op) {
+    case CompareOp.Greater:
+      // `x > y` is equivalent to `x != y && !(x < y)`
+      // TODO: handle NaN
+      return AluExp.mul(AluExp.cmpne(a, b), AluExp.cmplt(a, b).not());
+    case CompareOp.Less:
+      return AluExp.cmplt(a, b);
+    case CompareOp.Equal:
+      return AluExp.cmpne(a, b).not();
+    case CompareOp.NotEqual:
+      return AluExp.cmpne(a, b);
+    case CompareOp.GreaterEqual:
+      // `x >= y` is equivalent to `!(x < y)`
+      // TODO: handle NaN
+      return AluExp.cmplt(a, b).not();
+    case CompareOp.LessEqual:
+      return AluExp.add(AluExp.cmplt(a, b), AluExp.cmpne(a, b).not());
+  }
 }
 
 /**

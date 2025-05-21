@@ -11,6 +11,7 @@ import {
   zeros,
 } from "./frontend/array";
 import * as core from "./frontend/core";
+import { jit } from "./frontend/jaxpr";
 import * as vmapModule from "./frontend/vmap";
 import { deepEqual, prod, range } from "./utils";
 
@@ -229,3 +230,25 @@ export function allclose(
   }
   return true;
 }
+
+export const matmul = jit(function matmul(x: Array, y: Array) {
+  if (x.ndim === 0 || y.ndim === 0) {
+    throw new TypeError("matmul: x and y must be at least 1D");
+  }
+  if (y.ndim === 1) {
+    // Matrix-vector product
+    return x.mul(y).sum(x.ndim - 1);
+  }
+
+  // Otherwise, we multiply x: [..., N, K] and y: [..., K, M]
+  x = x.reshape(x.shape.toSpliced(-1, 0, 1)); // [..., N, 1, K]
+  y = y
+    .reshape(y.shape.toSpliced(-2, 0, 1))
+    .transpose([
+      ...range(y.shape.length - 1),
+      y.shape.length,
+      y.shape.length - 1,
+    ]); // [..., 1, M, K]
+
+  return x.mul(y).sum(Math.max(x.ndim, y.ndim) - 1);
+});

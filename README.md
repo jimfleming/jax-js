@@ -75,6 +75,7 @@ npm test
   expect(df(5)).toBeAllclose(75);
   ```
 - Frontend transformations need to match backend type for pureArray() and zeros() calls
+- Need to break up operations if jit stitches more than 16 inputs
 
 ## Milestones
 
@@ -90,14 +91,15 @@ npm test
   - [ ] "Unroll" optimizations (multiple loop iters per thread, e.g., matmul)
   - [ ] "Group" optimizations (multiple threads per value, e.g., matvec)
   - [ ] Blocks respect local dimensions
+- [x] Other dtypes like int32 and bool
+- [x] `jit()` support via Jaxprs and kernel fusion
 - [ ] We figure out the `dispose()` / refcount / linear types stuff
   - [ ] `dispose()` for saved "const" tracers in Jaxprs
-  - [ ] Garbage collection for "Lit" type in Jaxpr, maybe needs to be not stored as Array & hashable
+  - [ ] Garbage collection for JIT programs, maybe needs to be moved off-device
+  - [ ] Memory scheduling, buffer allocation (can be tricky)
 - [ ] Demos: Navier-Stokes, neural networks, statistics
 - [ ] Wasm backend (needs malloc)
   - [ ] SIMD support for Wasm backend
 - [ ] Device switching with `.to()` between webgpu/cpu/wasm
-- [ ] `jit()` support via Jaxprs and kernel fusion
-- [ ] Other dtypes like int32 and bool
 - [ ] numpy/jax API compatibility table
 - [ ] Import tfjs models

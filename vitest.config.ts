@@ -3,6 +3,11 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  esbuild: {
+    supported: {
+      using: false, // Needed to lower 'using' statements in tests.
+    },
+  },
   test: {
     setupFiles: ["test/setup.ts"],
     browser: {

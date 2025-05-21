@@ -1,4 +1,12 @@
-import { grad, jvp, linearize, makeJaxpr, numpy as np, vjp } from "@jax-js/jax";
+import {
+  grad,
+  jit,
+  jvp,
+  linearize,
+  makeJaxpr,
+  numpy as np,
+  vjp,
+} from "@jax-js/jax";
 import { expect, suite, test } from "vitest";
 
 suite("jax.makeJaxpr()", () => {
@@ -19,10 +27,10 @@ suite("jax.makeJaxpr()", () => {
       ]),
     );
     expect(jaxpr.toString()).toMatchInlineSnapshot(`
-      "{ lambda v_1:float32[2,3] .
-        let v_3:float32[2,3] = add v_1 2
-            v_4:float32[2,3] = mul v_3 v_1
-        in ( v_4 ) }"
+      "{ lambda a:float32[2,3] .
+        let b:float32[2,3] = add a 2
+            c:float32[2,3] = mul b a
+        in ( c ) }"
     `);
     expect(consts).toEqual([]);
   });
@@ -33,10 +41,10 @@ suite("jax.makeJaxpr()", () => {
 
     const { jaxpr, consts } = makeJaxpr(fdot)(np.array(2));
     expect(jaxpr.toString()).toMatchInlineSnapshot(`
-      "{ lambda v_1:float32[] .
-        let v_3:float32[] = add v_1 2
-            v_10:float32[] = add v_3 v_1
-        in ( v_10 ) }"
+      "{ lambda a:float32[] .
+        let b:float32[] = add a 2
+            c:float32[] = add b a
+        in ( c ) }"
     `);
     expect(consts).toEqual([]);
   });
@@ -49,10 +57,10 @@ suite("jax.makeJaxpr()", () => {
     const { jaxpr, consts } = makeJaxpr(grad(f))(3);
     expect(consts).toEqual([]);
     expect(jaxpr.toString()).toMatchInlineSnapshot(`
-      "{ lambda v_1:float32[] .
-        let v_16:float32[] = add 1 v_1
-            v_18:float32[] = add v_16 v_1
-        in ( v_18 ) }"
+      "{ lambda a:float32[] .
+        let b:float32[] = add 1 a
+            c:float32[] = add b a
+        in ( c ) }"
     `);
   });
 });
@@ -113,5 +121,14 @@ suite("jax.grad()", () => {
     const ddf = grad(df); // d^2/dx^2 sin(cos(x)) = -sin^2(x)sin(cos(x)) - cos(x)cos(cos(x))
     expect(df(3)).toBeAllclose(-0.077432003);
     expect(ddf(3)).toBeAllclose(0.559854311);
+  });
+});
+
+suite("jax.jit()", () => {
+  test("works for a simple scalar function", () => {
+    const f = (x: np.Array) => x.mul(x).mul(x); // d/dx (x^3) = 3x^2
+    const f2 = jit(f);
+    expect(f(np.array(2))).toBeAllclose(8);
+    expect(f2(np.array(2))).toBeAllclose(8);
   });
 });

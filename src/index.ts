@@ -6,18 +6,11 @@ import * as vmapModule from "./frontend/vmap";
 import * as numpy from "./numpy";
 import { Array, ArrayLike } from "./numpy";
 import * as tree from "./tree";
-import type { JsTree, JsTreeDef } from "./tree";
+import type { JsTree, JsTreeDef, MapJsTree } from "./tree";
 
 import "./polyfills";
 
 export { init, BackendType, backendTypes, numpy, setBackend, tree };
-
-// Convert a subtype of JsTree<A> into a JsTree<B>, with the same structure.
-type MapJsTree<T, A, B> = T extends A
-  ? B
-  : T extends globalThis.Array<infer U>
-    ? MapJsTree<U, A, B>[]
-    : { [K in keyof T]: MapJsTree<T[K], A, B> };
 
 // Assert that a function's arguments are a subtype of the given type.
 type WithArgsSubtype<F extends (args: any[]) => any, T> =
@@ -56,6 +49,12 @@ export const makeJaxpr = jaxprModule.makeJaxpr as unknown as <
   consts: Array[];
   treedef: JsTreeDef;
 };
+
+export const jit = jaxprModule.jit as <
+  F extends (...args: any[]) => JsTree<Array>,
+>(
+  f: WithArgsSubtype<F, JsTree<ArrayLike>>,
+) => (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
 
 /**
  * Produce a local linear approximation to a function at a point using jvp() and

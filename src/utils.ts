@@ -88,10 +88,6 @@ export function range(
   return result;
 }
 
-export function repeat<T>(value: T, count: number): T[] {
-  return Array.from({ length: count }, () => value);
-}
-
 export function isPermutation(axis: number[], n: number): boolean {
   if (axis.length !== n) return false;
   const seen = new Set<number>();

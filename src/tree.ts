@@ -10,6 +10,15 @@ export enum NodeType {
 
 export type JsTree<T> = T | JsTree<T>[] | { [key: string]: JsTree<T> };
 
+// Convert a subtype of JsTree<A> into a JsTree<B>, with the same structure.
+export type MapJsTree<T, A, B> = T extends A
+  ? B
+  : T extends globalThis.Array<infer U>
+    ? number extends T["length"]
+      ? MapJsTree<U, A, B>[] // plain array
+      : { [K in keyof T]: MapJsTree<T[K], A, B> } // tuple: map each slot, keep tuple shape
+    : { [K in keyof T]: MapJsTree<T[K], A, B> }; // object: map each slot, keep object shape
+
 /** Analog to the JAX "pytree" object, but for JavaScript. */
 export class JsTreeDef {
   static leaf = new JsTreeDef(NodeType.Leaf, null, []);
