@@ -3,7 +3,7 @@
 import { AluExp, AluOp, AluVar, Kernel, Reduction } from "../alu";
 import { Backend, Slot } from "../backend";
 import { ShapeTracker, unravelAlu } from "../shape";
-import { deepEqual, FpHash, prod, range, rep } from "../utils";
+import { DEBUG, deepEqual, FpHash, prod, range, rep } from "../utils";
 import { aluCompare, Array, generalBroadcast, PendingExecute } from "./array";
 import { CompareOp, Primitive, ShapedArray } from "./core";
 import { Jaxpr, Lit, Var } from "./jaxpr";
@@ -195,6 +195,10 @@ export function jitCompile(
 
   const cached = jitCompileCache.get(cacheKey);
   if (cached) return cached;
+
+  if (DEBUG >= 1) {
+    console.info("=========== JIT Compile ===========\n" + jaxpr.toString());
+  }
 
   const nargs = jaxpr.inBinders.length - consts.length;
   const builder = new JitProgramBuilder(backend, nargs);

@@ -689,6 +689,26 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     }
   }
 
+  class JaxJsStrategy extends Strategy {
+    name = "jax-js";
+
+    async run(): Promise<number> {
+      const jax = await import("@jax-js/jax");
+      await jax.init();
+      jax.setBackend("webgpu");
+
+      const a = jax.numpy.array(randomBuffer).reshape([n, n]);
+      const b = jax.numpy.array(randomBuffer).reshape([n, n]);
+      const start = performance.now();
+      const c = jax.numpy.dot(a, b);
+      const ar = (await c.data()) as Float32Array;
+      printBufferItems(ar);
+      const time = performance.now() - start;
+
+      return time / 1000; // seconds
+    }
+  }
+
   const strategiesList: Strategy[] = [
     new NaiveStrategy(1),
     new NaiveStrategy(16),
@@ -705,6 +725,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     new Unroll4x4Strategy(8, 16),
     new Unroll4x4Strategy(16, 16),
     new TfjsStrategy(),
+    new JaxJsStrategy(),
   ];
 
   const strategies = Object.fromEntries(strategiesList.map((s) => [s.name, s]));

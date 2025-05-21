@@ -243,6 +243,8 @@ export function tuneWebgpu(kernel: Kernel): TuneResult {
       choices.sort(lexCompare);
       dim.applyUpcast(choices[0][2], choices[0][3]);
       upcastedAxis.add(choices[0][2]);
+    } else {
+      break;
     }
   }
 

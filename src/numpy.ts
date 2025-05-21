@@ -268,14 +268,12 @@ export const dot = jit(function dot(x: Array, y: Array) {
   // second-to-last axis of y. (y.ndim >= 2)
   //
   // dot(x, y)[i,j,k,m] = sum(x[i,j,:] * y[k,:,m])
+  x = x.reshape(x.shape.toSpliced(-1, 0, ...rep(y.ndim - 1, 1))); // [..., N, 1, 1, ..., 1, K]
   y = y.transpose([
     ...range(y.shape.length - 2),
     y.shape.length - 1,
     y.shape.length - 2,
   ]); // [..., M, K]
-
-  // Now unsqueeze axes of x so that they appear to the left of y.
-  x = x.reshape(x.shape.toSpliced(-1, 0, ...rep(y.ndim - 1, 1))); // [..., N, 1, 1, ..., 1, K]
 
   return x.mul(y).sum(x.ndim - 1);
 });
