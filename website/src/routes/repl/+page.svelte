@@ -24,10 +24,10 @@
       title: "Arrays",
       code: String.raw`import { grad, numpy as np } from "@jax-js/jax";
 
-const f = (x: np.Array) => x.mul(x);
+const f = (x: np.Array) => x.ref.mul(x).sum();
 const df = grad(f);
 
-const x = np.array(3);
+const x = np.array([1, 2, 3, 4]);
 console.log(f(x.ref).js());
 console.log(df(x).js());
 `,
