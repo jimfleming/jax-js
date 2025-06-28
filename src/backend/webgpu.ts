@@ -1,7 +1,7 @@
 import { AluExp, AluGroup, AluOp, DType, Kernel } from "../alu";
 import { Backend, BackendType, Executable, Slot, SlotError } from "../backend";
 import { tuneWebgpu } from "../tuner";
-import { DEBUG, findPow2, strip1 } from "../utils";
+import { DEBUG, findPow2, FpHash, strip1 } from "../utils";
 
 type ShaderInfo = {
   shader: string;
@@ -109,7 +109,7 @@ export class WebGPUBackend implements Backend {
   }
 
   #cachedShader(kernel: Kernel): ShaderInfo {
-    const cacheKey = kernel.getHash();
+    const cacheKey = FpHash.hash(kernel);
     let result = this.#cachedShaderMap.get(cacheKey);
     if (!result) {
       result = pipelineSource(this.device, kernel);

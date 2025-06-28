@@ -196,6 +196,10 @@ export function strip1(str: string): string {
   return str;
 }
 
+export interface FpHashable {
+  hash(state: FpHash): void;
+}
+
 /**
  * Polynomial hashes modulo p are good at avoiding collisions in expectation.
  * Probability-wise, it's good enough to be used for something like
@@ -214,10 +218,27 @@ export class FpHash {
     this.value = (this.value * base + x) % modulus;
   }
 
-  update(...values: (string | boolean | bigint | null | undefined)[]): this {
+  update(
+    ...values: (
+      | string
+      | boolean
+      | number
+      | bigint
+      | null
+      | undefined
+      | FpHashable
+    )[]
+  ): this {
     for (const x of values) {
       if (typeof x === "string") {
         for (const c of x) this.#update(BigInt(199 + c.charCodeAt(0)));
+      } else if (typeof x === "number") {
+        if (Number.isInteger(x)) {
+          this.#update(68265653n ^ BigInt(x));
+        } else {
+          const ar = new Float64Array([x]);
+          this.#update(new DataView(ar.buffer).getBigUint64(0, true));
+        }
       } else if (typeof x === "boolean") {
         this.#update(x ? 69069841n : 63640693n);
       } else if (typeof x === "bigint") {
@@ -228,14 +249,40 @@ export class FpHash {
         this.#update(37832657n);
       } else if (x === undefined) {
         this.#update(18145117n);
+      } else if (typeof x === "object" && "hash" in x) {
+        // If the object has a hash method, call it.
+        x.hash(this);
       }
     }
     return this;
   }
 
   static hash(
-    ...values: (string | boolean | bigint | null | undefined)[]
+    ...values: (
+      | string
+      | boolean
+      | number
+      | bigint
+      | null
+      | undefined
+      | FpHashable
+    )[]
   ): bigint {
     return new FpHash().update(...values).value;
+  }
+}
+
+/** Run a function while caching it inline inside a `Map`. */
+export function runWithCache<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  thunk: () => V,
+): V {
+  if (cache.has(key)) {
+    return cache.get(key)!;
+  } else {
+    const value = thunk();
+    cache.set(key, value);
+    return value;
   }
 }

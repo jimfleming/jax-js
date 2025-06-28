@@ -7,7 +7,7 @@ import {
   flatten as treeFlatten,
   unflatten as treeUnflatten,
 } from "../tree";
-import { unzip2, zip } from "../utils";
+import { FpHash, FpHashable, runWithCache, unzip2, zip } from "../utils";
 import { Array, generalBroadcast, pureArray, scalar } from "./array";
 import {
   bind,
@@ -146,7 +146,9 @@ export class JaxprEqn {
 }
 
 /** Typed intermediate representation for traced computations. */
-export class Jaxpr {
+export class Jaxpr implements FpHashable {
+  #hash?: bigint;
+
   constructor(
     readonly inBinders: Var[],
     readonly eqns: JaxprEqn[],
@@ -179,6 +181,46 @@ export class Jaxpr {
 
   toString(): string {
     return this.pprint().toString();
+  }
+
+  /**
+   * Gets a hash of this Jaxpr.
+   *
+   * Var identity is not considered in the hash, so two Jaxprs with the same
+   * order of assignments and operators but different variable IDs will resolve
+   * to the same hash (and toString representation).
+   */
+  getHash(): bigint {
+    if (this.#hash !== undefined) return this.#hash;
+    const hasher = new FpHash();
+    const varIds = new Map<Var, bigint>();
+    const vi = (v: Var) => {
+      if (varIds.has(v)) return varIds.get(v)!;
+      const id = varIds.size + 1; // Start from 1, why not?
+      varIds.set(v, FpHash.hash(id, v.aval.dtype, ...v.aval.shape));
+      return id;
+    };
+    hasher.update(this.inBinders.length, ...this.inBinders.map(vi));
+    hasher.update(
+      this.eqns.length,
+      ...this.eqns.flatMap((eqn) => [
+        eqn.primitive,
+        eqn.inputs.length,
+        ...eqn.inputs.map((x) => (x instanceof Var ? vi(x) : x.value)),
+        JSON.stringify(eqn.params),
+        eqn.outBinders.length,
+        ...eqn.outBinders.map(vi),
+      ]),
+    );
+    hasher.update(
+      this.outs.length,
+      ...this.outs.map((x) => (x instanceof Var ? vi(x) : x.value)),
+    );
+    return (this.#hash = hasher.value);
+  }
+
+  hash(state: FpHash): void {
+    state.update(this.getHash());
   }
 
   /**
@@ -713,22 +755,30 @@ export function makeJaxpr(
 export function jit<F extends (...args: any[]) => any>(
   f: F,
 ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F> {
+  const cache = new Map<string, ReturnType<ReturnType<typeof makeJaxpr>>>();
+
   return ((...args) => {
     const [argsFlat, inTree] = treeFlatten(args);
 
     const avalsInFlat = argsFlat.map((x) => ShapedArray.fromAval(getAval(x)));
     const avalsIn = treeUnflatten(inTree, avalsInFlat);
 
+    const cacheKey = JSON.stringify(avalsIn);
     const {
       jaxpr,
       consts,
       treedef: outTree,
-    } = makeJaxpr(f)(...(avalsIn as any[]));
+    } = runWithCache(cache, cacheKey, () =>
+      makeJaxpr(f)(...(avalsIn as any[])),
+    );
 
     const outs = bind(
       Primitive.JitCall,
       [...consts.map((c) => c.ref), ...argsFlat],
-      { jaxpr, numConsts: consts.length },
+      {
+        jaxpr,
+        numConsts: consts.length,
+      },
     );
     return treeUnflatten(outTree, outs);
   }) as F;

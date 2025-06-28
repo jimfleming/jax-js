@@ -139,6 +139,12 @@ class JitProgramBuilder {
   }
 
   insertFreeSteps(outputIds: JitId[]): void {
+    // Only free malloc'd ids that are not used in the output.
+    //
+    // Intermediates are allowed to be freed independently, since they are
+    // guaranteed to be unused elsewhere after the JitProgram is executed.
+    // Meanwhile, inputs and consts need higher-level reference counting on the
+    // Array objects, so we don't free them here. We update it at the end.
     const ids = this.steps
       .filter((s) => s.type === "malloc")
       .map((s) => s.output);
@@ -192,9 +198,7 @@ export function jitCompile(
   }
 
   const cacheKey =
-    backend.type +
-    new FpHash().update(jaxpr.toString(), ...consts.map((c) => BigInt(c.id)))
-      .value;
+    backend.type + FpHash.hash(jaxpr, ...consts.map((c) => c.id));
 
   const cached = jitCompileCache.get(cacheKey);
   if (cached) return cached;
@@ -253,7 +257,6 @@ export function jitCompile(
   for (let i = 0; i < nargs; i++) {
     const v = jaxpr.inBinders[consts.length + i];
     ctx.set(v, { type: "imm", arg: i }); // JitId i = input #i
-    // TODO: We don't free inputs yet! Only intermediates.
   }
 
   // Now run each primitive through a set of rules, mirroring implRules.

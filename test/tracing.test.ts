@@ -195,8 +195,8 @@ suite("jax.jit()", () => {
       [1, 2, 3],
       [4, 5, 6],
     ]);
-    expect(s(ar).js()).toEqual(21);
-    expect(vmap(s)(ar).js()).toEqual([6, 15]);
+    expect(s(ar.ref).js()).toEqual(21);
+    expect(vmap(s)(ar.ref).js()).toEqual([6, 15]);
     expect(vmap(s, 1)(ar).js()).toEqual([5, 7, 9]);
   });
 });

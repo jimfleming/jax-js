@@ -1,5 +1,5 @@
 import { ShapeTracker } from "./shape";
-import { clamp, FpHash, strip1 } from "./utils";
+import { clamp, FpHash, FpHashable, strip1 } from "./utils";
 
 export enum DType {
   Float32 = "float32",
@@ -18,7 +18,7 @@ const isFloatDtype = (dtype: DType) =>
  * to just math on scalars. We're doing this to avoid the complexity of a full
  * graph rewrite engine.
  */
-export class AluExp {
+export class AluExp implements FpHashable {
   #hash?: bigint;
   #simplified?: AluExp;
   #range?: [number, number];
@@ -132,12 +132,13 @@ export class AluExp {
     if (this.#hash !== undefined) return this.#hash;
     const hasher = new FpHash();
     hasher.update(this.op, this.dtype, JSON.stringify(this.arg));
-    hasher.update(BigInt(this.src.length));
-    for (const s of this.src) {
-      hasher.update(s.getHash());
-    }
+    hasher.update(this.src.length, ...this.src);
     this.#hash = hasher.value;
     return this.#hash;
+  }
+
+  hash(state: FpHash): void {
+    state.update(this.getHash());
   }
 
   /** Substitute variables in this AluExp to values. */
@@ -759,7 +760,7 @@ export const AluVar = {
  * representation. It consists of one or more fused operations, optionally
  * indexing into a buffer.
  */
-export class Kernel {
+export class Kernel implements FpHashable {
   constructor(
     /** Number of global arguments / arrays. */
     readonly nargs: number,
@@ -773,12 +774,8 @@ export class Kernel {
     this.exp = exp.simplify();
   }
 
-  getHash(): bigint {
-    const hasher = new FpHash();
-    hasher.update(BigInt(this.nargs), BigInt(this.size));
-    hasher.update(this.exp.getHash());
-    hasher.update(this.reduction?.getHash());
-    return hasher.value;
+  hash(state: FpHash): void {
+    state.update(this.nargs, this.size, this.exp, this.reduction);
   }
 }
 
@@ -797,7 +794,7 @@ export class Kernel {
  * passing through some optimization strategy. But optimizations are not coded
  * at this level since they depend on GPU, versus CPU or Wasm.
  */
-export class Reduction {
+export class Reduction implements FpHashable {
   constructor(
     /** Data type of the values being reduced over. */
     readonly dtype: DType,
@@ -813,11 +810,8 @@ export class Reduction {
     }
   }
 
-  getHash(): bigint {
-    const hasher = new FpHash();
-    hasher.update(this.dtype, this.op, BigInt(this.size));
-    hasher.update(this.fusion.getHash());
-    return hasher.value;
+  hash(state: FpHash): void {
+    state.update(this.dtype, this.op, this.size, this.fusion);
   }
 
   /** Get the identity for this reduction operation. */

@@ -615,6 +615,8 @@ export class Array extends Tracer {
         const prevPending = args.flatMap((x) => x.#pending);
         for (const exe of prevPending) exe.updateRc(+1);
         pending.splice(0, 0, ...prevPending); // Dispatch order of pending kernels is important.
+        args.forEach((x) => x.dispose()); // Dispose of args after dispatch.
+
         return outputs.map((source, i) => {
           return new Array(
             source,
