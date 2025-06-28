@@ -1,17 +1,17 @@
 import { beforeEach, expect, suite, test } from "vitest";
 
-import { backendTypes, init, setBackend } from "../backend";
+import { devices, init, setDevice } from "../backend";
 import { arange, array, ones, zeros } from "./array";
 import { DType } from "../alu";
 
 const backendsAvailable = await init();
 
-suite.each(backendTypes)("backend:%s", (backend) => {
-  const skipped = !backendsAvailable.includes(backend);
+suite.each(devices)("backend:%s", (device) => {
+  const skipped = !backendsAvailable.includes(device);
 
   beforeEach(({ skip }) => {
     if (skipped) skip();
-    setBackend(backend);
+    setDevice(device);
   });
 
   test("can construct zeros()", async () => {

@@ -1,22 +1,15 @@
-import {
-  backendTypes,
-  grad,
-  init,
-  jvp,
-  numpy as np,
-  setBackend,
-} from "@jax-js/jax";
+import { devices, grad, init, jvp, numpy as np, setDevice } from "@jax-js/jax";
 import { beforeEach, expect, suite, test } from "vitest";
 
 import { DType } from "../src/alu";
 
 const backendsAvailable = await init();
 
-suite.each(backendTypes)("backend:%s", (backend) => {
-  const skipped = !backendsAvailable.includes(backend);
+suite.each(devices)("backend:%s", (device) => {
+  const skipped = !backendsAvailable.includes(device);
   beforeEach(({ skip }) => {
     if (skipped) skip();
-    setBackend(backend);
+    setDevice(device);
   });
 
   suite("jax.numpy.eye()", () => {

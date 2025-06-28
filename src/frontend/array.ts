@@ -8,7 +8,7 @@ import {
   Kernel,
   Reduction,
 } from "../alu";
-import { Backend, BackendType, Executable, getBackend, Slot } from "../backend";
+import { Backend, Device, Executable, getBackend, Slot } from "../backend";
 import { ShapeTracker, unravelAlu } from "../shape";
 import {
   deepEqual,
@@ -99,7 +99,7 @@ export class PendingExecute {
   }
 }
 
-type DTypeAndBackend = { dtype?: DType; backend?: BackendType };
+type DTypeAndDevice = { dtype?: DType; device?: Device };
 
 /**
  * A multidimensional numeric array with data stored on CPU or GPU.
@@ -152,7 +152,7 @@ export class Array extends Tracer {
     return `Array:${this.#dtype}[${this.shape.join(",")}]`;
   }
 
-  get backend(): BackendType {
+  get device(): Device {
     return this.#backend.type;
   }
 
@@ -483,7 +483,7 @@ export class Array extends Tracer {
     if (
       this.#source instanceof AluExp &&
       prod(this.shape) < inlineArrayLimit &&
-      this.backend !== "cpu"
+      this.device !== "cpu"
     ) {
       return this.#dataInline();
     }
@@ -523,7 +523,7 @@ export class Array extends Tracer {
     if (
       this.#source instanceof AluExp &&
       prod(this.shape) < inlineArrayLimit &&
-      this.backend !== "cpu"
+      this.device !== "cpu"
     ) {
       return this.#dataInline();
     }
@@ -640,7 +640,7 @@ export class Array extends Tracer {
 /** Construct an array from a single scalar constant. */
 export function scalar(
   value: number | boolean,
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ) {
   // TODO: This should probably be merged with numpy.full().
   if (typeof value === "number") {
@@ -658,7 +658,7 @@ export function scalar(
     AluExp.const(dtype, value),
     ShapeTracker.fromShape([]),
     dtype,
-    getBackend(backend),
+    getBackend(device),
   );
 }
 
@@ -670,7 +670,7 @@ export function array(
     | Int32Array
     | RecursiveArray<number>
     | RecursiveArray<boolean>,
-  { shape, dtype, backend }: { shape?: number[] } & DTypeAndBackend = {},
+  { shape, dtype, device }: { shape?: number[] } & DTypeAndDevice = {},
 ): Array {
   if (values instanceof Array) {
     if (shape && !deepEqual(values.shape, shape)) {
@@ -684,7 +684,7 @@ export function array(
   } else if (values instanceof Float32Array || values instanceof Int32Array) {
     return arrayFromData(values, shape ?? [values.length], {
       dtype,
-      backend,
+      device,
     });
   } else {
     // Assume this is a nested array object, infer the shape.
@@ -703,15 +703,15 @@ export function array(
         `Jagged shape: ${JSON.stringify(shape)} vs ${flat.length}`,
       );
     }
-    if (size === 0) return zeros(shape, { dtype, backend });
+    if (size === 0) return zeros(shape, { dtype, device });
     if (typeof flat[0] === "boolean") {
       dtype = dtype ?? DType.Bool;
       const data = new Int32Array(flat.map((x) => (x ? 1 : 0)));
-      return arrayFromData(data, shape, { dtype, backend });
+      return arrayFromData(data, shape, { dtype, device });
     } else {
       dtype = dtype ?? DType.Float32;
       const data = new Float32Array(flat as number[]);
-      return arrayFromData(data, shape, { dtype, backend });
+      return arrayFromData(data, shape, { dtype, device });
     }
   }
 }
@@ -719,7 +719,7 @@ export function array(
 function arrayFromData(
   data: Float32Array | Int32Array,
   shape: number[],
-  { dtype, backend: backendType }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ): Array {
   if (data.length < inlineArrayLimit) {
     // Check if all elements are of the same value and short-circuit.
@@ -732,11 +732,11 @@ function arrayFromData(
     }
     if (allEqual) {
       // If all elements are equal, we can use a constant expression.
-      return full(shape, data[0], { dtype, backend: backendType });
+      return full(shape, data[0], { dtype, device });
     }
   }
 
-  const backend = getBackend(backendType);
+  const backend = getBackend(device);
   if (data instanceof Float32Array) {
     if (dtype && dtype !== DType.Float32) {
       throw new Error("Float32Array must have float32 type");
@@ -819,24 +819,24 @@ export function zerosLike(val: TracerValue): Array {
 /** Return a new array of given shape and type, filled with zeros. */
 export function zeros(
   shape: number[],
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ): Array {
-  return full(shape, 0, { dtype, backend });
+  return full(shape, 0, { dtype, device });
 }
 
 /** Return a new array of given shape and type, filled with ones. */
 export function ones(
   shape: number[],
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ): Array {
-  return full(shape, 1, { dtype, backend });
+  return full(shape, 1, { dtype, device });
 }
 
 /** Return a new array of given shape and type, filled with `fill_value`. */
 export function full(
   shape: number[],
   fillValue: number | boolean | Array,
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ): Array {
   let source: AluExp;
   if (typeof fillValue === "number") {
@@ -856,7 +856,7 @@ export function full(
     source,
     ShapeTracker.fromShape(shape),
     dtype ?? DType.Float32,
-    getBackend(backend),
+    getBackend(device),
   );
 }
 
@@ -869,7 +869,7 @@ export function full(
 export function eye(
   numRows: number,
   numCols?: number,
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ): Array {
   numCols = numCols ?? numRows;
   dtype = dtype ?? DType.Float32;
@@ -877,11 +877,11 @@ export function eye(
   if (numCols < numRows) {
     // If less columns than rows, take the transpose since it's no longer a
     // simple modular arithmetic expression.
-    const arr = eye(numCols, numRows, { dtype, backend });
+    const arr = eye(numCols, numRows, { dtype, device });
     return arr.transpose();
   }
   if (numRows === 0) {
-    return zeros([0, numCols], { dtype, backend });
+    return zeros([0, numCols], { dtype, device });
   }
 
   const exp = AluExp.cmplt(
@@ -892,16 +892,16 @@ export function eye(
     AluExp.cast(dtype, exp),
     ShapeTracker.fromShape([numRows, numCols]),
     dtype,
-    getBackend(backend),
+    getBackend(device),
   );
 }
 
 /** Return the identity array, with ones on the main diagonal. */
 export function identity(
   n: number,
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ): Array {
-  return eye(n, n, { dtype, backend });
+  return eye(n, n, { dtype, device });
 }
 
 /**
@@ -922,7 +922,7 @@ export function arange(
   start: number,
   stop?: number,
   step: number = 1,
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ) {
   dtype = dtype ?? DType.Int32; // default to int32 for arange
 
@@ -937,7 +937,7 @@ export function arange(
   }
   const size = Math.max(0, Math.ceil((stop - start) / step));
   if (size === 0) {
-    return zeros([0], { dtype, backend });
+    return zeros([0], { dtype, device });
   }
 
   const exp = AluExp.add(
@@ -945,7 +945,7 @@ export function arange(
     AluExp.mul(AluExp.cast(dtype, AluVar.idx), AluExp.const(dtype, step)),
   );
   const st = ShapeTracker.fromShape([size]);
-  return new Array(exp, st, dtype, getBackend(backend));
+  return new Array(exp, st, dtype, getBackend(device));
 }
 
 /**
@@ -962,7 +962,7 @@ export function linspace(
   stop: number,
   num: number = 50,
   endpoint: boolean = true,
-  { dtype, backend }: DTypeAndBackend = {},
+  { dtype, device }: DTypeAndDevice = {},
 ) {
   dtype = dtype ?? DType.Float32; // default to float32 for linspace
 
@@ -971,11 +971,11 @@ export function linspace(
       `Invalid num for linspace: ${num}. Must be non-negative integer.`,
     );
   } else if (num === 0) {
-    return zeros([0], { dtype, backend });
+    return zeros([0], { dtype, device });
   } else if (num === 1) {
-    return scalar(start, { dtype, backend }).reshape([1]);
+    return scalar(start, { dtype, device }).reshape([1]);
   } else if (start === stop) {
-    return full([num], start, { dtype, backend });
+    return full([num], start, { dtype, device });
   }
 
   // Now num >= 2, there are at least 2 points.
@@ -992,7 +992,7 @@ export function linspace(
     ),
   );
   const st = ShapeTracker.fromShape([num]);
-  return new Array(exp, st, dtype, getBackend(backend));
+  return new Array(exp, st, dtype, getBackend(device));
 }
 
 /** Translate a `CompareOp` into an `AluExp` on two sub-expressions. */

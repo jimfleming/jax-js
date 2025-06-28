@@ -1,5 +1,5 @@
 import { AluExp, AluGroup, AluOp, DType, Kernel } from "../alu";
-import { Backend, BackendType, Executable, Slot, SlotError } from "../backend";
+import { Backend, Device, Executable, Slot, SlotError } from "../backend";
 import { tuneWebgpu } from "../tuner";
 import { DEBUG, findPow2, FpHash, strip1 } from "../utils";
 
@@ -14,7 +14,7 @@ type ShaderDispatch = ShaderInfo & {
 
 /** Implementation of `Backend` that uses WebGPU in browsers. */
 export class WebGPUBackend implements Backend {
-  readonly type: BackendType = "webgpu";
+  readonly type: Device = "webgpu";
   readonly maxArgs: number;
 
   readonly pipelines: ShaderPipelineCache;

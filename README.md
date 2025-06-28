@@ -41,10 +41,10 @@ The default backend runs on CPU, but on [supported browsers](https://caniuse.com
 you can switch to GPU for maximum performance.
 
 ```js
-import { numpy as np, setBackend } from "@jax-js/jax";
+import { numpy as np, setDevice } from "@jax-js/jax";
 
 // Change the default backend to GPU.
-setBackend("webgpu");
+setDevice("webgpu");
 
 const x = np.ones([4096, 4096]);
 const y = np.dot(x.ref, x); // JIT-compiled into a matrix multiplication kernel
@@ -63,7 +63,6 @@ npm test
 ## Next on Eric's mind
 
 - Test for if you take sin(), cos() of an int/bool
-- Rename "backend" to "device" in public API
 - Start working on first neural network
 - Investigate why jax-js Matmul is 2x slower on Safari TP than unroll kernel
 - How many threads to create per workgroup, depends on hardware

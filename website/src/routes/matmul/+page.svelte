@@ -671,7 +671,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     async run(): Promise<number> {
       const tf = await import("@tensorflow/tfjs");
       await import("@tensorflow/tfjs-backend-webgpu");
-      await tf.setBackend("webgpu");
+      await tf.setDevice("webgpu");
 
       const a = tf.tensor(randomBuffer, [n, n]);
       const b = tf.tensor(randomBuffer, [n, n]);
@@ -697,7 +697,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     async run(): Promise<number> {
       const jax = await import("@jax-js/jax");
       await jax.init();
-      jax.setBackend("webgpu");
+      jax.setDevice("webgpu");
       const np = jax.numpy;
 
       const a = np.array(randomBuffer, { shape: [n, n] });

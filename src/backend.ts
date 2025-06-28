@@ -12,21 +12,21 @@
 import { Kernel } from "./alu";
 import { CPUBackend } from "./backend/cpu";
 
-export type BackendType = "cpu" | "webgpu";
-export const backendTypes: BackendType[] = ["cpu", "webgpu"];
+export type Device = "cpu" | "webgpu";
+export const devices: Device[] = ["cpu", "webgpu"];
 
 // TODO: Switch to Wasm or WebGL after implemented. WebGPU is not available on
 // test platform or all browsers, so it shouldn't be the default.
-let defaultBackend: BackendType = "cpu";
-const initializedBackends = new Map<BackendType, Backend>();
+let defaultBackend: Device = "cpu";
+const initializedBackends = new Map<Device, Backend>();
 initializedBackends.set("cpu", new CPUBackend());
 
-/** Set the default backend (must be initialized). */
-export function setBackend(backendType: BackendType): void {
-  if (initializedBackends.has(backendType)) {
-    defaultBackend = backendType;
+/** Set the default device backend (must be initialized). */
+export function setDevice(device: Device): void {
+  if (initializedBackends.has(device)) {
+    defaultBackend = device;
   } else {
-    throw new Error(`Backend not initialized: ${backendType}`);
+    throw new Error(`Backend not initialized: ${device}`);
   }
 }
 
@@ -37,18 +37,18 @@ export function setBackend(backendType: BackendType): void {
  * backends is provided, only attempt to initialize those. Returns a list of
  * available backends.
  */
-export async function init(...backends: BackendType[]): Promise<BackendType[]> {
-  if (backends.length === 0) {
-    backends = backendTypes;
+export async function init(...devicesToInit: Device[]): Promise<Device[]> {
+  if (devicesToInit.length === 0) {
+    devicesToInit = devices;
   }
   const promises: Promise<void>[] = [];
-  for (const backendType of new Set(backends)) {
-    if (!initializedBackends.has(backendType)) {
+  for (const device of new Set(devicesToInit)) {
+    if (!initializedBackends.has(device)) {
       promises.push(
         (async () => {
-          const backend = await createBackend(backendType);
+          const backend = await createBackend(device);
           if (backend) {
-            initializedBackends.set(backendType, backend);
+            initializedBackends.set(device, backend);
           }
         })(),
       );
@@ -59,12 +59,10 @@ export async function init(...backends: BackendType[]): Promise<BackendType[]> {
 }
 
 /** Create a backend, if available. Internal function called by `init()`. */
-async function createBackend(
-  backendType: BackendType,
-): Promise<Backend | null> {
-  if (backendType === "cpu") {
+async function createBackend(device: Device): Promise<Backend | null> {
+  if (device === "cpu") {
     return new CPUBackend();
-  } else if (backendType === "webgpu") {
+  } else if (device === "webgpu") {
     if (!navigator.gpu) return null; // WebGPU is not available.
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) return null;
@@ -98,16 +96,16 @@ async function createBackend(
       return null;
     }
   } else {
-    throw new Error(`Backend not found: ${backendType}`);
+    throw new Error(`Backend not found: ${device}`);
   }
 }
 
 /** Retrieve a backend that has been initialized. */
-export function getBackend(backendType?: BackendType): Backend {
-  backendType = backendType ?? defaultBackend;
-  const backend = initializedBackends.get(backendType);
+export function getBackend(device?: Device): Backend {
+  device = device ?? defaultBackend;
+  const backend = initializedBackends.get(device);
   if (!backend) {
-    throw new Error(`${backendType} backend not ready, call init() first`);
+    throw new Error(`${device} backend not ready, call init() first`);
   }
   return backend;
 }
@@ -118,7 +116,7 @@ export type Slot = number;
 /** A device backend. */
 export interface Backend {
   /** The name of the backend as a string. */
-  readonly type: BackendType;
+  readonly type: Device;
 
   /** Maximum number of arguments per dispatched kernel. */
   readonly maxArgs: number;

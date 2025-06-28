@@ -9,21 +9,21 @@ import {
   Kernel,
   Reduction,
 } from "../alu";
-import { backendTypes, getBackend, init } from "../backend";
+import { devices, getBackend, init } from "../backend";
 import { ShapeTracker, unravelAlu } from "../shape";
 import { range } from "../utils";
 
 const backendsAvailable = await init();
 
-suite.each(backendTypes)("backend:%s", (backendType) => {
-  const skipped = !backendsAvailable.includes(backendType);
+suite.each(devices)("backend:%s", (device) => {
+  const skipped = !backendsAvailable.includes(device);
 
   beforeEach(({ skip }) => {
     if (skipped) skip();
   });
 
   test("can run simple operations", async () => {
-    const backend = getBackend(backendType);
+    const backend = getBackend(device);
 
     const shape = ShapeTracker.fromShape([3]);
     const a = backend.malloc(3 * 4, new Float32Array([1, 2, 3]).buffer);
@@ -67,7 +67,7 @@ suite.each(backendTypes)("backend:%s", (backendType) => {
   });
 
   test("can create array from index", async () => {
-    const backend = getBackend(backendType);
+    const backend = getBackend(device);
     const a = backend.malloc(200 * 4);
     try {
       const exe = await backend.prepare(
@@ -82,7 +82,7 @@ suite.each(backendTypes)("backend:%s", (backendType) => {
   });
 
   test("can run synchronous operations", () => {
-    const backend = getBackend(backendType);
+    const backend = getBackend(device);
     const a = backend.malloc(4 * 4);
     try {
       const exe = backend.prepareSync(
@@ -97,7 +97,7 @@ suite.each(backendTypes)("backend:%s", (backendType) => {
   });
 
   test("synchronously reads a buffer", () => {
-    const backend = getBackend(backendType);
+    const backend = getBackend(device);
     const array = new Float32Array([1, 1, 2, 3, 5, 7]);
     const a = backend.malloc(6 * 4, array.buffer);
     try {
@@ -111,7 +111,7 @@ suite.each(backendTypes)("backend:%s", (backendType) => {
   });
 
   test("asynchronously reads a buffer", async () => {
-    const backend = getBackend(backendType);
+    const backend = getBackend(device);
     const array = new Float32Array([1, 1, 2, 3, 5, 7]);
     const a = backend.malloc(6 * 4, array.buffer);
     try {
@@ -125,7 +125,7 @@ suite.each(backendTypes)("backend:%s", (backendType) => {
   });
 
   test("performs reduction", () => {
-    const backend = getBackend(backendType);
+    const backend = getBackend(device);
 
     const array = new Float32Array([1, 1, 2, 3, 5, 7]);
     const a = backend.malloc(6 * 4, array.buffer);
@@ -165,7 +165,7 @@ suite.each(backendTypes)("backend:%s", (backendType) => {
   });
 
   test("performs 64x64 matmul", async () => {
-    const backend = getBackend(backendType);
+    const backend = getBackend(device);
 
     // This should trigger an optimization via Upcast/Unroll.
     const n = 64;

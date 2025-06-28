@@ -1,10 +1,10 @@
 import { AluOp, DType, Kernel } from "../alu";
-import { Backend, BackendType, Executable, Slot, SlotError } from "../backend";
+import { Backend, Device, Executable, Slot, SlotError } from "../backend";
 import { tuneNullopt } from "../tuner";
 
 /** Most basic implementation of `Backend` for testing. */
 export class CPUBackend implements Backend {
-  readonly type: BackendType = "cpu";
+  readonly type: Device = "cpu";
   readonly maxArgs = Infinity;
 
   #buffers: Map<Slot, { ref: number; buffer: ArrayBuffer }>;
