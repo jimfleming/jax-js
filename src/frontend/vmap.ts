@@ -6,7 +6,6 @@ import {
   bind,
   broadcast,
   compare,
-  CompareOp,
   cos,
   exp,
   flattenFun,
@@ -20,6 +19,7 @@ import {
   neg,
   newMain,
   Primitive,
+  PrimitiveParams,
   reciprocal,
   reduce,
   ShapedArray,
@@ -38,7 +38,6 @@ import {
 } from "../tree";
 import { Jaxpr, jaxprAsFun, makeJaxpr } from "./jaxpr";
 import { jvp } from "./jvp";
-import { AluOp } from "../alu";
 
 function mappedAval(batchDim: number, aval: AbstractValue) {
   const shape = [...aval.shape];
@@ -120,10 +119,10 @@ class BatchTrace extends Trace {
     return new BatchTracer(this, val, null);
   }
 
-  processPrimitive(
-    primitive: Primitive,
+  processPrimitive<P extends Primitive>(
+    primitive: P,
     tracers: BatchTracer[],
-    params: Record<string, any>,
+    params: PrimitiveParams<P>,
   ): BatchTracer[] {
     const [valsIn, bdimsIn] = unzip2(tracers.map((t) => [t.val, t.batchDim]));
     const vmapRule = vmapRules[primitive];
@@ -146,11 +145,11 @@ class BatchTrace extends Trace {
   }
 }
 
-type VmapRule = (
+type VmapRule<P extends Primitive> = (
   axisSize: number,
   args: Tracer[],
   dims: (number | null)[],
-  params: any,
+  params: PrimitiveParams<P>,
 ) => [Tracer[], (number | null)[]];
 
 function handleScalarBroadcasting(nd: number, x: Tracer, d: number | null) {
@@ -164,12 +163,8 @@ function handleScalarBroadcasting(nd: number, x: Tracer, d: number | null) {
 }
 
 /** Process a primitive with built-in broadcasting. */
-function broadcastBatcher(op: (...x: Tracer[]) => Tracer) {
-  return (
-    axisSize: number,
-    args: Tracer[],
-    dims: (number | null)[],
-  ): ReturnType<VmapRule> => {
+function broadcastBatcher(op: (...x: Tracer[]) => Tracer): VmapRule<Primitive> {
+  return (axisSize, args, dims) => {
     if (args.length === 0) {
       throw new Error("Empty list in broadcastBatcher");
     }
@@ -202,17 +197,15 @@ function broadcastBatcher(op: (...x: Tracer[]) => Tracer) {
   };
 }
 
-function vectorizedUnopBatchingRule(op: (x: Tracer) => Tracer) {
-  return (
-    axisSize: number,
-    [x]: Tracer[],
-    [xBdim]: (number | null)[],
-  ): ReturnType<VmapRule> => {
+function vectorizedUnopBatchingRule(
+  op: (x: Tracer) => Tracer,
+): VmapRule<Primitive> {
+  return (axisSize, [x], [xBdim]) => {
     return [[op(x)], [xBdim]];
   };
 }
 
-const vmapRules: Partial<Record<Primitive, VmapRule>> = {
+const vmapRules: Partial<{ [P in Primitive]: VmapRule<P> }> = {
   [Primitive.Add]: broadcastBatcher(add),
   [Primitive.Mul]: broadcastBatcher(mul),
   [Primitive.Idiv]: broadcastBatcher(idiv),
@@ -224,12 +217,7 @@ const vmapRules: Partial<Record<Primitive, VmapRule>> = {
   [Primitive.Log]: vectorizedUnopBatchingRule(log),
   [Primitive.Min]: broadcastBatcher(min),
   [Primitive.Max]: broadcastBatcher(max),
-  [Primitive.Reduce](
-    axisSize,
-    [x],
-    [xBdim],
-    { op, axis }: { op: AluOp; axis: number[] },
-  ) {
+  [Primitive.Reduce](axisSize, [x], [xBdim], { op, axis }) {
     if (xBdim === null) {
       return [[reduce(x, op, axis)], [null]];
     }
@@ -237,11 +225,16 @@ const vmapRules: Partial<Record<Primitive, VmapRule>> = {
     const outBdim = xBdim - axis.filter((ax) => ax < xBdim).length;
     return [[reduce(x, op, newAxis)], [outBdim]];
   },
-  [Primitive.Compare](axisSize, args, dims, { op }: { op: CompareOp }) {
-    return broadcastBatcher((x, y) => compare(x, y, op))(axisSize, args, dims);
+  [Primitive.Compare](axisSize, args, dims, { op }) {
+    return broadcastBatcher((x, y) => compare(x, y, op))(
+      axisSize,
+      args,
+      dims,
+      {},
+    );
   },
   // TODO: where, transpose, broadcast, reshape, flip
-  [Primitive.JitCall](axisSize, args, dims, { jaxpr }: { jaxpr: Jaxpr }) {
+  [Primitive.JitCall](axisSize, args, dims, { jaxpr }) {
     const { newJaxpr, newConsts } = vmapJaxpr(jaxpr, axisSize, dims);
     const outs = bind(Primitive.JitCall, [...newConsts, ...args], {
       jaxpr: newJaxpr,

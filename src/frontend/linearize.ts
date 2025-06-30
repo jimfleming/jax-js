@@ -17,6 +17,7 @@ import {
   neg,
   newMain,
   Primitive,
+  PrimitiveParams,
   reduce,
   reshape,
   ShapedArray,
@@ -261,10 +262,10 @@ class PartialEvalTrace extends Trace {
     }
   }
 
-  processPrimitive(
-    primitive: Primitive,
+  processPrimitive<P extends Primitive>(
+    primitive: P,
     tracers: PartialEvalTracer[],
-    params: Record<string, any>,
+    params: PrimitiveParams<P>,
   ): Tracer[] {
     if (tracers.every((t) => t.pval.isKnown)) {
       return bind(
@@ -277,7 +278,8 @@ class PartialEvalTrace extends Trace {
       // Special case, needs its own PartialEvalTrace handling because unlike
       // other primtiives, JitCall can have subexpressions that are known while
       // other outputs are unknown.
-      return this.#partialEvalJaxpr(params.jaxpr, params.numConsts, tracers);
+      const { jaxpr, numConsts } = params as PrimitiveParams<Primitive.JitCall>;
+      return this.#partialEvalJaxpr(jaxpr, numConsts, tracers);
     }
     const tracersIn = tracers.map((t) => this.instantiateConst(t));
     const avalsIn = tracersIn.map((t) => t.pval.aval);
@@ -556,7 +558,7 @@ function evalJaxprTransposed(
     if (!rule) {
       throw new TypeError(`Backward pass not implemented for ${eqn.primitive}`);
     }
-    const cotangentsIn = rule(cotangentsOut, primalsIn, eqn.params);
+    const cotangentsIn = rule(cotangentsOut, primalsIn, eqn.params as any);
     for (let j = 0; j < eqn.inputs.length; j++) {
       const v = eqn.inputs[j];
       if (v instanceof Var && !knownPrimals.has(v)) {
@@ -583,10 +585,10 @@ class NonlinearError extends TypeError {
   }
 }
 
-type TransposeRule = (
+type TransposeRule<P extends Primitive> = (
   cotangents: Tracer[],
   primals: (Tracer | UndefPrimal)[],
-  params: any,
+  params: PrimitiveParams<P>,
 ) => (Tracer | null)[];
 
 // You need a transpose rule for a primitive p if:
@@ -595,7 +597,7 @@ type TransposeRule = (
 //
 // This computes a backward pass, so it pulls back cotangents to the inputs of p
 // that are UndefPrimal (i.e., tangents that weren't sent forward).
-const transposeRules: Partial<Record<Primitive, TransposeRule>> = {
+const transposeRules: Partial<{ [P in Primitive]: TransposeRule<P> }> = {
   [Primitive.Mul]([ct], [x, y]) {
     // BUG: Doesn't handle broadcasting.
     if (x instanceof UndefPrimal === y instanceof UndefPrimal)
@@ -619,7 +621,7 @@ const transposeRules: Partial<Record<Primitive, TransposeRule>> = {
       ? ((y as Tracer).dispose(), [ct, null])
       : ((x as Tracer).dispose(), [null, ct]);
   },
-  [Primitive.Reduce]([ct], [x], { op, axis }: { op: AluOp; axis: number[] }) {
+  [Primitive.Reduce]([ct], [x], { op, axis }) {
     if (!(x instanceof UndefPrimal)) throw new NonlinearError(Primitive.Reduce);
     if (op === AluOp.Add) {
       return [broadcast(ct, x.aval.shape, axis)];
@@ -650,26 +652,26 @@ const transposeRules: Partial<Record<Primitive, TransposeRule>> = {
     cond.dispose();
     return cts;
   },
-  [Primitive.Transpose]([ct], [x], { perm }: { perm: number[] }) {
+  [Primitive.Transpose]([ct], [x], { perm }) {
     if (!(x instanceof UndefPrimal))
       throw new NonlinearError(Primitive.Transpose);
     return [transpose(ct, invertPermutation(perm))];
   },
-  [Primitive.Broadcast]([ct], [x], { axis }: { axis: number[] }) {
+  [Primitive.Broadcast]([ct], [x], { axis }) {
     if (!(x instanceof UndefPrimal))
       throw new NonlinearError(Primitive.Broadcast);
     return [reduce(ct, AluOp.Add, axis)];
   },
-  [Primitive.Reshape]([ct], [x], _: { shape: number[] }) {
+  [Primitive.Reshape]([ct], [x], _) {
     if (!(x instanceof UndefPrimal))
       throw new NonlinearError(Primitive.Reshape);
     return [reshape(ct, x.aval.shape)];
   },
-  [Primitive.Flip]([ct], [x], { axis }: { axis: number[] }) {
+  [Primitive.Flip]([ct], [x], { axis }) {
     if (!(x instanceof UndefPrimal)) throw new NonlinearError(Primitive.Flip);
     return [flip(ct, axis)];
   },
-  [Primitive.JitCall](cts, args, { jaxpr }: { jaxpr: Jaxpr }) {
+  [Primitive.JitCall](cts, args, { jaxpr }) {
     // We need this one because the jvp() rule for JitCall generates a JitCall
     // with the transformed Jaxpr. So grad-of-jit will result in a transposed
     // JitCall, which we need to handle.

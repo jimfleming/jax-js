@@ -11,7 +11,6 @@ import {
   bind,
   broadcast,
   compare,
-  CompareOp,
   cos,
   exp,
   flattenFun,
@@ -25,6 +24,7 @@ import {
   neg,
   newMain,
   Primitive,
+  PrimitiveParams,
   reciprocal,
   reduce,
   reshape,
@@ -74,15 +74,15 @@ class JVPTrace extends Trace {
     return new JVPTracer(this, val, zerosLike(val));
   }
 
-  processPrimitive(
-    primitive: Primitive,
+  processPrimitive<P extends Primitive>(
+    primitive: P,
     tracers: JVPTracer[],
-    params: Record<string, any>,
+    params: PrimitiveParams<P>,
   ): JVPTracer[] {
     const [primalsIn, tangentsIn] = unzip2(
       tracers.map((x) => [x.primal, x.tangent]),
     );
-    const jvpRule: JvpRule | undefined = jvpRules[primitive];
+    const jvpRule: JvpRule<P> | undefined = jvpRules[primitive];
     if (jvpRule === undefined) {
       throw new Error(`No JVP rule for: ${primitive}`);
     }
@@ -93,13 +93,13 @@ class JVPTrace extends Trace {
   }
 }
 
-type JvpRule = (
+type JvpRule<P extends Primitive> = (
   primals: Tracer[],
   tangents: Tracer[],
-  params: any,
+  params: PrimitiveParams<P>,
 ) => [Tracer[], Tracer[]];
 
-const jvpRules: Record<Primitive, JvpRule> = {
+const jvpRules: { [P in Primitive]: JvpRule<P> } = {
   [Primitive.Add]([x, y], [dx, dy]) {
     return [[x.add(y)], [dx.add(dy)]];
   },
@@ -141,14 +141,14 @@ const jvpRules: Record<Primitive, JvpRule> = {
   [Primitive.Max]([x, y], [dx, dy]) {
     return [[max(x.ref, y.ref)], [where(less(y, x), dx, dy)]];
   },
-  [Primitive.Reduce]([x], [dx], { op, axis }: { op: AluOp; axis: number[] }) {
+  [Primitive.Reduce]([x], [dx], { op, axis }) {
     if (op === AluOp.Add) {
       return [[reduce(x, op, axis)], [reduce(dx, op, axis)]];
     } else {
       throw new Error(`JVP rule not implemented for reduce op: ${op}`);
     }
   },
-  [Primitive.Compare]([x, y], tangents, { op }: { op: CompareOp }) {
+  [Primitive.Compare]([x, y], tangents, { op }) {
     for (const t of tangents) t.dispose();
     const primal = compare(x, y, op);
     return [[primal], [zerosLike(primal)]];
@@ -157,23 +157,19 @@ const jvpRules: Record<Primitive, JvpRule> = {
     dcond.dispose();
     return [[where(cond.ref, x, y)], [where(cond, dx, dy)]];
   },
-  [Primitive.Transpose]([x], [dx], { perm }: { perm: number[] }) {
+  [Primitive.Transpose]([x], [dx], { perm }) {
     return [[transpose(x, perm)], [transpose(dx, perm)]];
   },
-  [Primitive.Broadcast](
-    [x],
-    [dx],
-    { shape, axis }: { shape: number[]; axis: number[] },
-  ) {
+  [Primitive.Broadcast]([x], [dx], { shape, axis }) {
     return [[broadcast(x, shape, axis)], [broadcast(dx, shape, axis)]];
   },
-  [Primitive.Reshape]([x], [dx], { shape }: { shape: number[] }) {
+  [Primitive.Reshape]([x], [dx], { shape }) {
     return [[reshape(x, shape)], [reshape(dx, shape)]];
   },
-  [Primitive.Flip]([x], [dx], { axis }: { axis: number[] }) {
+  [Primitive.Flip]([x], [dx], { axis }) {
     return [[flip(x, axis)], [flip(dx, axis)]];
   },
-  [Primitive.JitCall](primals, tangents, { jaxpr }: { jaxpr: Jaxpr }) {
+  [Primitive.JitCall](primals, tangents, { jaxpr }) {
     const { newJaxpr, newConsts } = jvpJaxpr(jaxpr);
     const outs = bind(
       Primitive.JitCall,

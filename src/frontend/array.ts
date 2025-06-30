@@ -24,13 +24,13 @@ import {
   getAval,
   newMain,
   Primitive,
+  PrimitiveParams,
   ShapedArray,
   Trace,
   Tracer,
   TracerValue,
   UseAfterFreeError,
 } from "./core";
-import { Jaxpr } from "./jaxpr";
 import { jitCompile } from "./jit";
 
 const JsArray = globalThis.Array;
@@ -558,7 +558,7 @@ export class Array extends Tracer {
   }
 
   /** @private Internal plumbing method for Array / Tracer ops. */
-  static _implRules(): Record<Primitive, ImplRule> {
+  static _implRules(): typeof implRules {
     return {
       [Primitive.Add]([x, y]) {
         return [x.#binary(AluOp.Add, y)];
@@ -593,11 +593,11 @@ export class Array extends Tracer {
       [Primitive.Max]([x, y]) {
         return [x.#binary(AluOp.Max, y)];
       },
-      [Primitive.Reduce]([x], { op, axis }: { op: AluOp; axis: number[] }) {
+      [Primitive.Reduce]([x], { op, axis }) {
         if (axis.length === 0) return [x];
         return [x.#moveAxesDown(axis).#reduce(op)];
       },
-      [Primitive.Compare]([x, y], { op }: { op: CompareOp }) {
+      [Primitive.Compare]([x, y], { op }) {
         const custom = ([x, y]: AluExp[]) => aluCompare(x, y, op);
         return [Array.#naryCustom("compare", custom, [x, y], [], DType.Bool)];
       },
@@ -605,27 +605,21 @@ export class Array extends Tracer {
         const custom = ([cond, x, y]: AluExp[]) => AluExp.where(cond, x, y);
         return [Array.#naryCustom("where", custom, [cond, x, y], [DType.Bool])];
       },
-      [Primitive.Transpose]([x], { perm }: { perm: number[] }) {
+      [Primitive.Transpose]([x], { perm }) {
         return [x.#transpose(perm)];
       },
-      [Primitive.Broadcast](
-        [x],
-        { shape, axis }: { shape: number[]; axis: number[] },
-      ) {
+      [Primitive.Broadcast]([x], { shape, axis }) {
         return [x.#reshape(x.#st.broadcast(shape, axis))];
       },
-      [Primitive.Reshape]([x], { shape }: { shape: number[] }) {
+      [Primitive.Reshape]([x], { shape }) {
         return [x.#reshape(x.#st.reshape(shape))];
       },
-      [Primitive.Flip]([x], { axis }: { axis: number[] }) {
+      [Primitive.Flip]([x], { axis }) {
         const arg = rep(x.ndim, false);
         for (const ax of axis) arg[ax] = true;
         return [x.#reshape(x.#st.flip(arg))];
       },
-      [Primitive.JitCall](
-        args,
-        { jaxpr, numConsts }: { jaxpr: Jaxpr; numConsts: number },
-      ) {
+      [Primitive.JitCall](args, { jaxpr, numConsts }) {
         if (jaxpr.inBinders.length !== args.length) {
           throw new Error(
             `jit_call expects ${jaxpr.inBinders.length} args, got ${args.length}`,
@@ -822,10 +816,10 @@ class EvalTrace extends Trace {
   pure = (x: TracerValue) => pureArray(x);
   lift = (x: Tracer) => x;
 
-  processPrimitive(
-    primitive: Primitive,
+  processPrimitive<P extends Primitive>(
+    primitive: P,
     tracers: Array[],
-    params: Record<string, any>,
+    params: PrimitiveParams<P>,
   ): Tracer[] {
     return implRules[primitive](tracers, params);
   }
@@ -834,8 +828,11 @@ class EvalTrace extends Trace {
 // Special bottom of the stack: must be level 0.
 const baseArrayTrace = new EvalTrace(newMain(EvalTrace, null));
 
-type ImplRule = (tracers: Array[], params: any) => Array[];
-const implRules: Record<Primitive, ImplRule> = Array._implRules();
+type ImplRule<P extends Primitive> = (
+  tracers: Array[],
+  params: PrimitiveParams<P>,
+) => Array[];
+const implRules: { [P in Primitive]: ImplRule<P> } = Array._implRules();
 
 export function zerosLike(val: TracerValue): Array {
   const aval = getAval(val);

@@ -1,4 +1,4 @@
-import { AluOp, DType } from "../alu";
+import { DType } from "../alu";
 import { ArrayLike } from "../numpy";
 import { PPrint } from "../pprint";
 import {
@@ -18,6 +18,7 @@ import {
   newDynamic,
   newMain,
   Primitive,
+  PrimitiveParams,
   ShapedArray,
   Trace,
   Tracer,
@@ -387,7 +388,8 @@ export function typecheckJaxpr(jaxpr: Jaxpr): JaxprType {
 
   for (const eqn of jaxpr.eqns) {
     const inTypes = eqn.inputs.map((x) => typecheckAtom(env, x));
-    const outTypes = abstractEvalRules[eqn.primitive](inTypes, eqn.params);
+    const rule = abstractEvalRules[eqn.primitive];
+    const outTypes = rule(inTypes, eqn.params as any);
     for (const [outBinder, outType] of zip(eqn.outBinders, outTypes)) {
       if (!outType.equals(outBinder.aval)) {
         throw new TypeError(
@@ -524,10 +526,10 @@ class JaxprTrace extends Trace {
   pure = this.getOrMakeConstTracer;
   lift = this.getOrMakeConstTracer;
 
-  processPrimitive(
-    primitive: Primitive,
+  processPrimitive<P extends Primitive>(
+    primitive: P,
     tracers: JaxprTracer[],
-    params: Record<string, any>,
+    params: PrimitiveParams<P>,
   ): JaxprTracer[] {
     const avalsIn = tracers.map((t) => t.aval);
     const avalsOut = abstractEvalRules[primitive](avalsIn, params);
@@ -644,7 +646,10 @@ function _inlineLiterals(jaxpr: Jaxpr, consts: Tracer[]): [Jaxpr, Tracer[]] {
   return [newJaxpr, newConsts];
 }
 
-type AbstractEvalRule = (avals: ShapedArray[], params: any) => ShapedArray[];
+type AbstractEvalRule<P extends Primitive> = (
+  avals: ShapedArray[],
+  params: PrimitiveParams<P>,
+) => ShapedArray[];
 
 function binopAbstractEval([x, y]: ShapedArray[]) {
   if (!(x instanceof ShapedArray) || !(y instanceof ShapedArray)) {
@@ -672,7 +677,7 @@ function vectorizedUnopAbstractEval([x]: ShapedArray[]) {
   return [ShapedArray.fromAval(x)];
 }
 
-export const abstractEvalRules: Record<Primitive, AbstractEvalRule> = {
+export const abstractEvalRules: { [P in Primitive]: AbstractEvalRule<P> } = {
   [Primitive.Add]: binopAbstractEval,
   [Primitive.Mul]: binopAbstractEval,
   [Primitive.Idiv]: binopAbstractEval,
@@ -684,7 +689,7 @@ export const abstractEvalRules: Record<Primitive, AbstractEvalRule> = {
   [Primitive.Log]: vectorizedUnopAbstractEval,
   [Primitive.Min]: binopAbstractEval,
   [Primitive.Max]: binopAbstractEval,
-  [Primitive.Reduce]([x], { axis }: { op: AluOp; axis: number[] }) {
+  [Primitive.Reduce]([x], { axis }) {
     const axisSet = new Set(axis);
     const newShape = x.shape.filter((_, i) => !axisSet.has(i));
     return [new ShapedArray(newShape, x.dtype)];
@@ -701,7 +706,7 @@ export const abstractEvalRules: Record<Primitive, AbstractEvalRule> = {
     );
     return [new ShapedArray(shape, x.dtype)];
   },
-  [Primitive.Transpose]([x], { perm }: { perm: number[] }) {
+  [Primitive.Transpose]([x], { perm }) {
     return [
       new ShapedArray(
         perm.map((i) => x.shape[i]),
@@ -709,16 +714,16 @@ export const abstractEvalRules: Record<Primitive, AbstractEvalRule> = {
       ),
     ];
   },
-  [Primitive.Broadcast]([x], { shape }: { shape: number[]; axis: number[] }) {
+  [Primitive.Broadcast]([x], { shape }) {
     return [new ShapedArray(shape, x.dtype)];
   },
-  [Primitive.Reshape]([x], { shape }: { shape: number[] }) {
+  [Primitive.Reshape]([x], { shape }) {
     return [new ShapedArray(shape, x.dtype)];
   },
-  [Primitive.Flip]([x], _: { axis: number[] }) {
+  [Primitive.Flip]([x], _) {
     return [new ShapedArray(x.shape, x.dtype)];
   },
-  [Primitive.JitCall](args, { jaxpr }: { jaxpr: Jaxpr }) {
+  [Primitive.JitCall](args, { jaxpr }) {
     const { inTypes, outTypes } = typecheckJaxpr(jaxpr);
     if (args.length !== inTypes.length) {
       throw new TypeError(

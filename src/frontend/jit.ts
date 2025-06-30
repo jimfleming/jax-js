@@ -5,7 +5,7 @@ import { Backend, Slot } from "../backend";
 import { ShapeTracker, unravelAlu } from "../shape";
 import { DEBUG, deepEqual, FpHash, prod, range, rep } from "../utils";
 import { aluCompare, Array, generalBroadcast, PendingExecute } from "./array";
-import { CompareOp, Primitive, ShapedArray } from "./core";
+import { Primitive, PrimitiveParams, ShapedArray } from "./core";
 import { Jaxpr, Lit, Var } from "./jaxpr";
 
 export type JitId = number;
@@ -276,7 +276,7 @@ export function jitCompile(
     const rule = jitRules[eqn.primitive];
     if (!rule)
       throw new TypeError(`JIT not implemented for primitive ${eqn.primitive}`);
-    const kernel = rule(nargs, inputExps, inputAvals, eqn.params);
+    const kernel = rule(nargs, inputExps, inputAvals, eqn.params as any);
 
     // Then dispatch the kernel, if it is a "black" node as determined from
     // dataflow analysis above.
@@ -313,15 +313,17 @@ export function jitCompile(
   return jp;
 }
 
-type JitRule = (
+type JitRule<P extends Primitive> = (
   nargs: number,
   exps: AluExp[],
   avals: ShapedArray[],
-  params: any,
+  params: PrimitiveParams<P>,
 ) => Kernel;
 
 // JIT handler for a broadcasted operation on at least 1 input.
-function broadcastedJit(fn: (exps: AluExp[], params: any) => AluExp): JitRule {
+function broadcastedJit<P extends Primitive>(
+  fn: (exps: AluExp[], params: PrimitiveParams<P>) => AluExp,
+): JitRule<P> {
   return (nargs, exps, avals, params) => {
     const newShape = avals.map((aval) => aval.shape).reduce(generalBroadcast);
 
@@ -351,9 +353,9 @@ function broadcastedJit(fn: (exps: AluExp[], params: any) => AluExp): JitRule {
   };
 }
 
-function reshapeJit(
-  fn: (st: ShapeTracker, params: any) => ShapeTracker,
-): JitRule {
+function reshapeJit<P extends Primitive>(
+  fn: (st: ShapeTracker, params: PrimitiveParams<P>) => ShapeTracker,
+): JitRule<P> {
   return (nargs, [a], [as], params) => {
     a = a.rewrite((exp) => {
       if (exp.op === AluOp.GlobalView) {
@@ -367,7 +369,7 @@ function reshapeJit(
   };
 }
 
-const jitRules: Partial<Record<Primitive, JitRule>> = {
+const jitRules: Partial<{ [P in Primitive]: JitRule<P> }> = {
   [Primitive.Add]: broadcastedJit(([a, b]) => AluExp.add(a, b)),
   [Primitive.Mul]: broadcastedJit(([a, b]) => AluExp.mul(a, b)),
   [Primitive.Idiv]: broadcastedJit(([a, b]) => AluExp.idiv(a, b)),
@@ -381,12 +383,7 @@ const jitRules: Partial<Record<Primitive, JitRule>> = {
   [Primitive.Log]: broadcastedJit(([a]) => AluExp.log(a)),
   [Primitive.Min]: broadcastedJit(([a, b]) => AluExp.min(a, b)),
   [Primitive.Max]: broadcastedJit(([a, b]) => AluExp.max(a, b)),
-  [Primitive.Reduce](
-    nargs,
-    [a],
-    [as],
-    { op, axis }: { op: AluOp; axis: number[] },
-  ) {
+  [Primitive.Reduce](nargs, [a], [as], { op, axis }) {
     const keptAxes: number[] = [];
     const shiftedAxes: number[] = [];
     const newShape: number[] = [];
@@ -416,35 +413,22 @@ const jitRules: Partial<Record<Primitive, JitRule>> = {
     const reduction = new Reduction(a.dtype, op, reductionSize);
     return new Kernel(nargs, size, a, reduction);
   },
-  [Primitive.Compare]: broadcastedJit(([a, b], { op }: { op: CompareOp }) => {
-    return aluCompare(a, b, op);
-  }),
+  [Primitive.Compare]: broadcastedJit(([a, b], { op }) => aluCompare(a, b, op)),
   [Primitive.Where]: broadcastedJit(([cond, a, b]) => AluExp.where(cond, a, b)),
-  [Primitive.Transpose]: reshapeJit(
-    (st: ShapeTracker, { perm }: { perm: number[] }) => {
-      return st.permute(perm);
-    },
-  ),
-  [Primitive.Broadcast]: reshapeJit(
-    (
-      st: ShapeTracker,
-      { shape, axis }: { shape: number[]; axis: number[] },
-    ) => {
-      return st.broadcast(shape, axis);
-    },
-  ),
-  [Primitive.Reshape]: reshapeJit(
-    (st: ShapeTracker, { shape }: { shape: number[] }) => {
-      return st.reshape(shape);
-    },
-  ),
-  [Primitive.Flip]: reshapeJit(
-    (st: ShapeTracker, { axis }: { axis: number[] }) => {
-      const arg = rep(st.shape.length, false);
-      for (const ax of axis) arg[ax] = true;
-      return st.flip(arg);
-    },
-  ),
+  [Primitive.Transpose]: reshapeJit((st, { perm }) => {
+    return st.permute(perm);
+  }),
+  [Primitive.Broadcast]: reshapeJit((st, { shape, axis }) => {
+    return st.broadcast(shape, axis);
+  }),
+  [Primitive.Reshape]: reshapeJit((st, { shape }) => {
+    return st.reshape(shape);
+  }),
+  [Primitive.Flip]: reshapeJit((st, { axis }) => {
+    const arg = rep(st.shape.length, false);
+    for (const ax of axis) arg[ax] = true;
+    return st.flip(arg);
+  }),
 };
 
 /** Determines how to split the Jaxpr into kernels via dataflow analysis. */

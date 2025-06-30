@@ -7,6 +7,7 @@ import {
   unflatten as treeUnflatten,
 } from "../tree";
 import { DEBUG, prod, range } from "../utils";
+import type { Jaxpr } from "./jaxpr";
 
 export enum Primitive {
   Add = "add",
@@ -29,6 +30,23 @@ export enum Primitive {
   Flip = "flip",
   JitCall = "jit_call",
 }
+
+interface PrimitiveParamsImpl
+  extends Record<Primitive, Record<string, unknown>> {
+  [Primitive.Reduce]: { op: AluOp; axis: number[] };
+  [Primitive.Compare]: { op: CompareOp };
+  [Primitive.Transpose]: { perm: number[] };
+  [Primitive.Broadcast]: { shape: number[]; axis: number[] };
+  [Primitive.Reshape]: { shape: number[] };
+  [Primitive.Flip]: { axis: number[] };
+  [Primitive.JitCall]: { jaxpr: Jaxpr; numConsts: number };
+}
+
+/** Type of parameters taken by each primitive. */
+export type PrimitiveParams<T extends Primitive> =
+  T extends keyof PrimitiveParamsImpl
+    ? PrimitiveParamsImpl[T]
+    : Record<string, never>;
 
 export enum CompareOp {
   Greater = "greater",
@@ -160,10 +178,10 @@ export function reduce(x: TracerValue, op: AluOp, axis?: number | number[]) {
   return bind1(Primitive.Reduce, [x], { op, axis });
 }
 
-function bind1(
-  prim: Primitive,
+function bind1<P extends Primitive>(
+  prim: P,
   args: TracerValue[],
-  params: Record<string, any> = {},
+  params: PrimitiveParams<P> = {} as any,
 ) {
   const [results] = bind(prim, args, params);
   return results;
@@ -219,10 +237,10 @@ export abstract class Trace {
   abstract pure(val: TracerValue): Tracer;
   abstract lift(val: Tracer): Tracer;
 
-  abstract processPrimitive(
-    primitive: Primitive,
+  abstract processPrimitive<P extends Primitive>(
+    primitive: P,
     tracers: Tracer[],
-    params: Record<string, any>,
+    params: PrimitiveParams<P>,
   ): Tracer[];
 }
 
@@ -443,10 +461,10 @@ export function getAval(x: TracerValue): AbstractValue {
   }
 }
 
-export function bind(
-  prim: Primitive,
+export function bind<P extends Primitive>(
+  prim: P,
   args: TracerValue[],
-  params: Record<string, any> = {},
+  params: PrimitiveParams<P> = {} as any,
 ) {
   const topTrace = findTopTrace(args);
   const tracers = args.map((arg) => fullRaise(topTrace, arg));
