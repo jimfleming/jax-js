@@ -123,7 +123,15 @@ export function max(x: TracerValue, y: TracerValue) {
   return bind1(Primitive.Max, [x, y]);
 }
 
-export function reduce(x: TracerValue, op: AluOp, axis?: number | number[]) {
+/** @inline */
+export type ReduceOpts = { keepDims?: boolean };
+
+export function reduce(
+  x: TracerValue,
+  op: AluOp,
+  axis?: number | number[],
+  opts?: ReduceOpts,
+) {
   if (!AluGroup.Reduce.has(op)) {
     throw new TypeError(`Invalid reduce operation: ${op}`);
   }
@@ -138,7 +146,9 @@ export function reduce(x: TracerValue, op: AluOp, axis?: number | number[]) {
   } else {
     axis = axis.map((a) => checkAxis(a, ndim(x)));
   }
-  return bind1(Primitive.Reduce, [x], { op, axis });
+  const originalShape = getShape(x);
+  const result = bind1(Primitive.Reduce, [x], { op, axis });
+  return opts?.keepDims ? broadcast(result, originalShape, axis) : result;
 }
 
 export function compare(x: TracerValue, y: TracerValue, op: CompareOp) {
@@ -451,11 +461,11 @@ export abstract class Tracer {
   lessEqual(other: this | TracerValue) {
     return lessEqual(this, other) as this;
   }
-  sum(axis?: number | number[]) {
-    return reduce(this, AluOp.Add, axis) as this;
+  sum(axis?: number | number[], opts?: ReduceOpts) {
+    return reduce(this, AluOp.Add, axis, opts) as this;
   }
-  prod(axis?: number | number[]) {
-    return reduce(this, AluOp.Mul, axis) as this;
+  prod(axis?: number | number[], opts?: ReduceOpts) {
+    return reduce(this, AluOp.Mul, axis, opts) as this;
   }
   transpose(perm?: number[]): this {
     return transpose(this, perm) as this;

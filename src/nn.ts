@@ -118,9 +118,9 @@ export function softmax(x: ArrayLike, axis?: number | number[]): Array {
     return ones(x.shape); // scalar case, return ones
   }
 
-  const xMax = broadcast(max(x.ref, axis), x.shape, axis); // keep dims
+  const xMax = max(x.ref, axis, { keepDims: true });
   const unnormalized = exp(x.sub(stopGradient(xMax)));
-  return unnormalized.ref.div(broadcast(unnormalized.sum(axis), x.shape, axis));
+  return unnormalized.ref.div(unnormalized.sum(axis, { keepDims: true }));
 }
 
 /**
@@ -144,11 +144,9 @@ export function logSoftmax(x: ArrayLike, axis?: number | number[]): Array {
     return zeros(x.shape); // scalar case, return log(1)
   }
 
-  const xMax = broadcast(max(x.ref, axis), x.shape, axis); // keep dims
+  const xMax = max(x.ref, axis, { keepDims: true }); // keep dims
   const shifted = x.sub(stopGradient(xMax));
-  const shiftedLogsumexp = log(
-    broadcast(exp(shifted.ref).sum(axis), x.shape, axis) as Array,
-  );
+  const shiftedLogsumexp = log(exp(shifted.ref).sum(axis, { keepDims: true }));
   return shifted.sub(shiftedLogsumexp);
 }
 

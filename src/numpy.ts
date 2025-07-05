@@ -151,23 +151,39 @@ export function size(a: ArrayLike, axis?: number): number {
 }
 
 /** Sum of the elements of the array over a given axis, or axes. */
-export function sum(a: ArrayLike, axis?: number | number[]): Array {
-  return core.reduce(a, AluOp.Add, axis) as Array;
+export function sum(
+  a: ArrayLike,
+  axis?: number | number[],
+  opts?: core.ReduceOpts,
+): Array {
+  return core.reduce(a, AluOp.Add, axis, opts) as Array;
 }
 
 /** Return product of the array elements over a given axis. */
-export function prod(a: ArrayLike, axis?: number | number[]): Array {
-  return core.reduce(a, AluOp.Mul, axis) as Array;
+export function prod(
+  a: ArrayLike,
+  axis?: number | number[],
+  opts?: core.ReduceOpts,
+): Array {
+  return core.reduce(a, AluOp.Mul, axis, opts) as Array;
 }
 
 /** Return the minimum of array elements along a given axis. */
-export function min(a: ArrayLike, axis?: number | number[]): Array {
-  return core.reduce(a, AluOp.Min, axis) as Array;
+export function min(
+  a: ArrayLike,
+  axis?: number | number[],
+  opts?: core.ReduceOpts,
+): Array {
+  return core.reduce(a, AluOp.Min, axis, opts) as Array;
 }
 
 /** Return the maximum of array elements along a given axis. */
-export function max(a: ArrayLike, axis?: number | number[]): Array {
-  return core.reduce(a, AluOp.Max, axis) as Array;
+export function max(
+  a: ArrayLike,
+  axis?: number | number[],
+  opts?: core.ReduceOpts,
+): Array {
+  return core.reduce(a, AluOp.Max, axis, opts) as Array;
 }
 
 /** Reverse the elements in an array along the given axes. */
