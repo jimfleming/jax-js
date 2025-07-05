@@ -1,6 +1,9 @@
 // Utilities for working with tree-like container data structures ("pytrees").
 
+import type { Array } from "./numpy";
 import { deepEqual, unzip2 } from "./utils";
+
+const JsArray = globalThis.Array;
 
 export enum NodeType {
   Array = "Array",
@@ -78,7 +81,7 @@ export function flatten<T>(tree: JsTree<T>): [T[], JsTreeDef] {
 }
 
 function _flatten<T>(tree: JsTree<T>, leaves: T[]): JsTreeDef {
-  if (Array.isArray(tree)) {
+  if (JsArray.isArray(tree)) {
     const childTrees = tree.map((c) => _flatten(c, leaves));
     return new JsTreeDef(NodeType.Array, null, childTrees);
   } else if (
@@ -150,4 +153,9 @@ export function map<T, U, Tree extends JsTree<T>>(
     resultLeaves.push(fn(leaves[i], ...restLeaves.map((x) => x[i])));
   }
   return unflatten(treedef, resultLeaves) as MapJsTree<Tree, T, U>;
+}
+
+/** Take a reference of every array in a tree. */
+export function ref<Tree extends JsTree<Array>>(tree: Tree): Tree {
+  return map((x: Array) => x.ref, tree) as unknown as Tree;
 }
