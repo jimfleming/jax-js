@@ -160,6 +160,18 @@ suite.each(devices)("device:%s", (device) => {
     expect(x.sum(-2).js()).toEqual([5, 7, 9]);
   });
 
+  test("mean along multiple axes", () => {
+    const x = array([
+      [1, 2, 3],
+      [4, 5, 6],
+    ]);
+    expect(x.ref.mean().js()).toEqual(3.5);
+    expect(x.ref.mean([0, 1]).js()).toEqual(3.5);
+    expect(x.ref.mean(0).js()).toEqual([2.5, 3.5, 4.5]);
+    expect(x.ref.mean(1).js()).toEqual([2, 5]);
+    x.dispose();
+  });
+
   test("advanced indexing with gather", () => {
     const x = array([1, 3, 2], { dtype: DType.Int32 });
     // np.eye(5)[[1, 3, 2]]

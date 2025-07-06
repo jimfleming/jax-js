@@ -136,11 +136,8 @@ export function reduce(
     throw new TypeError(`Invalid reduce operation: ${op}`);
   }
   if (axis === undefined) {
-    if (x instanceof Tracer) {
-      axis = range(x.shape.length);
-    } else {
-      axis = [];
-    }
+    if (x instanceof Tracer) axis = range(x.shape.length);
+    else axis = [];
   } else if (typeof axis === "number") {
     axis = [checkAxis(axis, ndim(x))];
   } else {
@@ -461,15 +458,45 @@ export abstract class Tracer {
   lessEqual(other: this | TracerValue) {
     return lessEqual(this, other) as this;
   }
+
+  /** Sum of the elements of the array over a given axis, or axes. */
   sum(axis?: number | number[], opts?: ReduceOpts) {
     return reduce(this, AluOp.Add, axis, opts) as this;
   }
+
+  /** Product of the array elements over a given axis. */
   prod(axis?: number | number[], opts?: ReduceOpts) {
     return reduce(this, AluOp.Mul, axis, opts) as this;
   }
+
+  /** Compute the average of the array elements along the specified axis. */
+  mean(axis?: number | number[], opts?: ReduceOpts) {
+    if (axis === undefined) {
+      axis = range(this.ndim);
+    } else if (typeof axis === "number") {
+      axis = [checkAxis(axis, this.ndim)];
+    } else {
+      axis = axis.map((a) => checkAxis(a, this.ndim));
+    }
+    let result = reduce(this, AluOp.Add, axis);
+    result = result.mul(prod(result.shape) / prod(this.shape));
+    if (opts?.keepDims) {
+      result = broadcast(result, this.shape, axis);
+    }
+    return result as this;
+  }
+
+  /** Permute the dimensions of an array. Defaults to reversing the axis order. */
   transpose(perm?: number[]): this {
     return transpose(this, perm) as this;
   }
+
+  /**
+   * Give a new shape to an array without changing its data.
+   *
+   * One shape dimension can be -1. In this case, the value is inferred from the
+   * length of the array and remaining dimensions.
+   */
   reshape(shape: number | number[]): this {
     return reshape(this, shape) as this;
   }

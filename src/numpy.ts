@@ -159,7 +159,7 @@ export function sum(
   return core.reduce(a, AluOp.Add, axis, opts) as Array;
 }
 
-/** Return product of the array elements over a given axis. */
+/** Product of the array elements over a given axis. */
 export function prod(
   a: ArrayLike,
   axis?: number | number[],
@@ -184,6 +184,15 @@ export function max(
   opts?: core.ReduceOpts,
 ): Array {
   return core.reduce(a, AluOp.Max, axis, opts) as Array;
+}
+
+/** Compute the average of the array elements along the specified axis. */
+export function mean(
+  a: ArrayLike,
+  axis?: number | number[],
+  opts?: core.ReduceOpts,
+): Array {
+  return fudgeArray(a).mean(axis, opts);
 }
 
 /**
