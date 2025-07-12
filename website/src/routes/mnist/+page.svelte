@@ -196,10 +196,21 @@
 <main class="p-4">
   <h1 class="text-2xl mb-2">mnist + jax-js</h1>
 
-  <p class="mb-4">
+  <p class="mb-2">
     Let's try to train a neural network to classify MNIST digits, in your
     browser.
   </p>
+
+  <p class="mb-2">Note: This is pretty scuffed right now. To do:</p>
+
+  <ul class="list-disc pl-6 mb-4">
+    <li>Weight initialization (currently very bad, sines and not random)</li>
+    <li>Optimizer to implement Adam, naive SGD with bad LR</li>
+    <li>Make output better and have charts</li>
+    <li>Convolutional layers</li>
+    <li>Improved JIT to be less inefficient</li>
+    <li>Interactive live views of data + inference demo</li>
+  </ul>
 
   <button onclick={run}>Run</button>
 
