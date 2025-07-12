@@ -104,13 +104,31 @@
     const lr = 5e-2;
 
     try {
-      const batchSize = 2000;
+      const batchSize = 1000;
+      const numBatches = Math.ceil(X_train.shape[0] / batchSize);
       for (let epoch = 0; epoch < 10; epoch++) {
         log(`=> Epoch ${epoch + 1}`);
-        for (let i = 0; i + batchSize <= X_train.shape[0]; i += batchSize) {
+        const randomIndices = [];
+        for (let i = 0; i < X_train.shape[0]; i++) {
+          randomIndices.push(i);
+        }
+        for (let i = randomIndices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [randomIndices[i], randomIndices[j]] = [
+            randomIndices[j],
+            randomIndices[i],
+          ];
+        }
+
+        for (let i = 0; i < numBatches; i++) {
+          const indices = np.array(
+            randomIndices.slice(i * batchSize, (i + 1) * batchSize),
+            { dtype: np.int32 },
+          );
+
           const startTime = performance.now();
-          const X = X_train.ref.slice([i, i + batchSize]).reshape([-1, 784]);
-          const y = y_train.ref.slice([i, i + batchSize]);
+          const X = X_train.ref.slice(indices.ref).reshape([-1, 784]);
+          const y = y_train.ref.slice(indices);
           const [lossVal, lossGrad] = valueAndGrad(loss)(
             tree.ref(params),
             X,
@@ -126,7 +144,7 @@
           }
           const duration = performance.now() - startTime;
           log(
-            `batch ${i} completed in ${duration.toFixed(1)} ms, loss: ${((await lossVal.jsAsync()) as number).toFixed(4)}`,
+            `batch ${i}/${numBatches} completed in ${duration.toFixed(1)} ms, loss: ${((await lossVal.jsAsync()) as number).toFixed(4)}`,
           );
         }
 
@@ -156,8 +174,9 @@
         }
         const testLossAvg = testLoss.reduce((a, b) => a + b) / testLoss.length;
         const testAccAvg = testAcc.reduce((a, b) => a + b) / testSize;
-        log(`=> Test acc: ${testAccAvg.toFixed(4)}`);
-        log(`=> Test loss: ${testLossAvg.toFixed(4)}`);
+        log(
+          `=> Test acc: ${testAccAvg.toFixed(4)}, loss: ${testLossAvg.toFixed(4)}`,
+        );
       }
     } finally {
       X_train.dispose();
@@ -184,7 +203,9 @@
 
   <button onclick={run}>Run</button>
 
-  <div class="font-mono text-sm bg-black h-[600px] overflow-y-scroll mt-8">
+  <div
+    class="font-mono text-sm bg-gray-900 px-4 py-2 h-[600px] overflow-y-scroll mt-8"
+  >
     {#each logs as log}
       <div class="text-white whitespace-pre-wrap">{log}</div>
     {/each}
