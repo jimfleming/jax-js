@@ -12,14 +12,11 @@ import {
   bitcast,
   broadcast,
   cast,
-  compare,
   cos,
   exp,
   flattenFun,
-  flip,
   fullRaise,
   gather,
-  idiv,
   less,
   log,
   max,
@@ -27,19 +24,14 @@ import {
   neg,
   newMain,
   notEqual,
-  pad,
   Primitive,
   PrimitiveParams,
-  randomBits,
   reciprocal,
   reduce,
-  reshape,
-  shrink,
   sin,
   Trace,
   Tracer,
   TracerValue,
-  transpose,
   TreeMismatchError,
   where,
 } from "./core";
@@ -106,32 +98,37 @@ type JvpRule<P extends Primitive> = (
   params: PrimitiveParams<P>,
 ) => [Tracer[], Tracer[]];
 
+/** Rule that applies the same operation to primals and tangents. */
+function linearTangentsJvp<P extends Primitive>(primitive: P): JvpRule<P> {
+  return (primals, tangents, params) => {
+    const ys = bind(primitive, primals, params);
+    const dys = bind(primitive, tangents, params);
+    return [ys, dys];
+  };
+}
+
+/** Rule that zeros out any tangents. */
+function zeroTangentsJvp<P extends Primitive>(primitive: P): JvpRule<P> {
+  return (primals, tangents, params) => {
+    for (const t of tangents) t.dispose();
+    const ys = bind(primitive, primals, params);
+    return [ys, ys.map((y) => zerosLike(y))];
+  };
+}
+
 const jvpRules: { [P in Primitive]: JvpRule<P> } = {
-  [Primitive.Add]([x, y], [dx, dy]) {
-    return [[x.add(y)], [dx.add(dy)]];
-  },
+  [Primitive.Add]: linearTangentsJvp(Primitive.Add),
   [Primitive.Mul]([x, y], [dx, dy]) {
     return [[x.ref.mul(y.ref)], [x.mul(dy).add(dx.mul(y))]];
   },
-  [Primitive.Idiv]([x, y], [dx, dy]) {
-    dx.dispose(), dy.dispose();
-    const z = idiv(x, y);
-    const dz = zerosLike(z);
-    return [[z], [dz]];
-  },
-  [Primitive.Neg]([x], [dx]) {
-    return [[x.neg()], [dx.neg()]];
-  },
+  [Primitive.Idiv]: zeroTangentsJvp(Primitive.Idiv),
+  [Primitive.Neg]: linearTangentsJvp(Primitive.Neg),
   [Primitive.Reciprocal]([x], [dx]) {
     // d(1/x) = -x^-2 * dx
     const xRecip = reciprocal(x.ref);
     return [[xRecip.ref], [neg(xRecip.ref.mul(xRecip)).mul(dx)]];
   },
-  [Primitive.StopGradient]([x], [dx]) {
-    dx.dispose();
-    const zeroGradient = zerosLike(x); // Stop gradient flows for x.
-    return [[x], [zeroGradient]];
-  },
+  [Primitive.StopGradient]: zeroTangentsJvp(Primitive.StopGradient),
   [Primitive.Cast]([x], [dx], { dtype }) {
     if (x.dtype === dtype) return [[x], [dx]]; // No-op if dtype is the same.
     // If floating-point, cast to the new dtype. Otherwise discard the tangent.
@@ -147,11 +144,7 @@ const jvpRules: { [P in Primitive]: JvpRule<P> } = {
     dx.dispose(); // Non-differentiable operation.
     return [[bitcast(x, dtype)], [zerosLike(x)]];
   },
-  [Primitive.RandomBits]([k0, k1], [dk0, dk1], { shape }) {
-    dk0.dispose(), dk1.dispose();
-    const x = randomBits(k0, k1, shape);
-    return [[x], [zerosLike(x)]];
-  },
+  [Primitive.RandomBits]: zeroTangentsJvp(Primitive.RandomBits),
   [Primitive.Sin]([x], [dx]) {
     return [[sin(x.ref)], [cos(x).mul(dx)]];
   },
@@ -201,33 +194,17 @@ const jvpRules: { [P in Primitive]: JvpRule<P> } = {
       throw new Error(`JVP rule not implemented for reduce op: ${op}`);
     }
   },
-  [Primitive.Compare]([x, y], tangents, { op }) {
-    for (const t of tangents) t.dispose();
-    const primal = compare(x, y, op);
-    return [[primal], [zerosLike(primal)]];
-  },
+  [Primitive.Compare]: zeroTangentsJvp(Primitive.Compare),
   [Primitive.Where]([cond, x, y], [dcond, dx, dy]) {
     dcond.dispose();
     return [[where(cond.ref, x, y)], [where(cond, dx, dy)]];
   },
-  [Primitive.Transpose]([x], [dx], { perm }) {
-    return [[transpose(x, perm)], [transpose(dx, perm)]];
-  },
-  [Primitive.Broadcast]([x], [dx], { shape, axis }) {
-    return [[broadcast(x, shape, axis)], [broadcast(dx, shape, axis)]];
-  },
-  [Primitive.Reshape]([x], [dx], { shape }) {
-    return [[reshape(x, shape)], [reshape(dx, shape)]];
-  },
-  [Primitive.Flip]([x], [dx], { axis }) {
-    return [[flip(x, axis)], [flip(dx, axis)]];
-  },
-  [Primitive.Shrink]([x], [dx], { slice }) {
-    return [[shrink(x, slice)], [shrink(dx, slice)]];
-  },
-  [Primitive.Pad]([x], [dx], { width }) {
-    return [[pad(x, width)], [pad(dx, width)]];
-  },
+  [Primitive.Transpose]: linearTangentsJvp(Primitive.Transpose),
+  [Primitive.Broadcast]: linearTangentsJvp(Primitive.Broadcast),
+  [Primitive.Reshape]: linearTangentsJvp(Primitive.Reshape),
+  [Primitive.Flip]: linearTangentsJvp(Primitive.Flip),
+  [Primitive.Shrink]: linearTangentsJvp(Primitive.Shrink),
+  [Primitive.Pad]: linearTangentsJvp(Primitive.Pad),
   [Primitive.Gather]([x, ...indices], [dx, ..._], { axis, outDim }) {
     // d(gather(x, indices)) = gather(dx, indices).
     // Note: We ignore the tangents for indices, since they are not differentiable.

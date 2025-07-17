@@ -725,7 +725,7 @@ export class Array extends Tracer {
           return [y];
         }
       },
-      [Primitive.RandomBits]([k0, k1], { shape }) {
+      [Primitive.RandomBits]([k0, k1], { shape, mode }) {
         const keyShape = generalBroadcast(k0.shape, k1.shape);
         if (!deepEqual(generalBroadcast(keyShape, shape), shape)) {
           throw new TypeError(
@@ -740,7 +740,7 @@ export class Array extends Tracer {
           device: k0.device,
         }).reshape(shape);
         const custom = ([k0, k1, c0, c1]: AluExp[]) =>
-          AluExp.threefry2x32(k0, k1, c0, c1);
+          AluExp.threefry2x32(k0, k1, c0, c1, mode);
         return [Array.#naryCustom("random_bits", custom, [k0, k1, c0, c1])];
       },
       [Primitive.Sin]([x]) {

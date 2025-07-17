@@ -57,7 +57,7 @@ interface PrimitiveParamsImpl
   [Primitive.Compare]: { op: CompareOp };
   [Primitive.Transpose]: { perm: number[] };
   [Primitive.Broadcast]: { shape: number[]; axis: number[] };
-  [Primitive.RandomBits]: { shape: number[] };
+  [Primitive.RandomBits]: { shape: number[]; mode: "xor" | 0 | 1 };
   [Primitive.Reshape]: { shape: number[] };
   [Primitive.Flip]: { axis: number[] };
   [Primitive.Shrink]: { slice: [number, number][] };
@@ -113,8 +113,13 @@ export function bitcast(x: TracerValue, dtype: DType) {
   return bind1(Primitive.Bitcast, [x], { dtype });
 }
 
-export function randomBits(k0: Tracer, k1: Tracer, shape: number[]) {
-  return bind1(Primitive.RandomBits, [k0, k1], { shape });
+export function randomBits(
+  k0: Tracer,
+  k1: Tracer,
+  shape: number[],
+  mode: "xor" | 0 | 1 = "xor",
+) {
+  return bind1(Primitive.RandomBits, [k0, k1], { shape, mode });
 }
 
 export function sin(x: TracerValue) {

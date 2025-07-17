@@ -462,7 +462,7 @@ const jitRules: { [P in Primitive]: JitRule<P> } = {
   [Primitive.StopGradient]: unopJit((a) => a), // No-op, just return the input.
   [Primitive.Cast]: unopJit((a, { dtype }) => AluExp.cast(dtype, a)),
   [Primitive.Bitcast]: unopJit((a, { dtype }) => AluExp.bitcast(dtype, a)),
-  [Primitive.RandomBits]: (nargs, keys, keyShapes, { shape }) => {
+  [Primitive.RandomBits]: (nargs, keys, keyShapes, { shape, mode }) => {
     const mapping = (st: ShapeTracker) => {
       if (!deepEqual(st.shape, shape))
         return st.broadcast(shape, range(shape.length - st.shape.length));
@@ -471,7 +471,7 @@ const jitRules: { [P in Primitive]: JitRule<P> } = {
     const k1 = reshapeViews(keys[1], mapping);
     const c0 = AluExp.u32(0);
     const c1 = AluExp.cast(DType.Uint32, AluVar.gidx);
-    const exp = AluExp.threefry2x32(c0, c1, k0, k1);
+    const exp = AluExp.threefry2x32(c0, c1, k0, k1, mode);
     return new Kernel(nargs, prod(shape), exp);
   },
   [Primitive.Sin]: unopJit(AluExp.sin),

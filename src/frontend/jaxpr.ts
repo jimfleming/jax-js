@@ -691,10 +691,10 @@ export const abstractEvalRules: { [P in Primitive]: AbstractEvalRule<P> } = {
   [Primitive.Neg]: vectorizedUnopAbstractEval,
   [Primitive.Reciprocal]: vectorizedUnopAbstractEval,
   [Primitive.StopGradient]: vectorizedUnopAbstractEval,
-  [Primitive.Cast]([x]: ShapedArray[], { dtype }: { dtype: DType }) {
+  [Primitive.Cast]([x]: ShapedArray[], { dtype }) {
     return [new ShapedArray(x.shape, dtype)];
   },
-  [Primitive.Bitcast]([x]: ShapedArray[], { dtype }: { dtype: DType }) {
+  [Primitive.Bitcast]([x]: ShapedArray[], { dtype }) {
     if (x.dtype === DType.Bool || dtype === DType.Bool) {
       throw new TypeError("Bitcast to/from bool is not allowed");
     }
@@ -705,10 +705,7 @@ export const abstractEvalRules: { [P in Primitive]: AbstractEvalRule<P> } = {
     }
     return [new ShapedArray(x.shape, dtype)];
   },
-  [Primitive.RandomBits](
-    [k0, k1]: ShapedArray[],
-    { shape }: { shape: number[] },
-  ) {
+  [Primitive.RandomBits]([k0, k1]: ShapedArray[], { shape }) {
     if (k0.dtype !== DType.Uint32 || k1.dtype !== DType.Uint32) {
       throw new TypeError(
         `RandomBits requires uint32 keys, got ${k0.dtype} and ${k1.dtype}`,
