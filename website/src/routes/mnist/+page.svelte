@@ -34,22 +34,31 @@
   };
 
   async function initializeParams(): Promise<Params> {
-    const [k1, k2, k3] = random.split(random.key(0), 3);
-    const w1 = random.uniform(k1, [784, 128], {
+    const [k11, k12, k21, k22, k31, k32] = random.split(random.key(0), 6);
+    const w1 = random.uniform(k11, [784, 128], {
       minval: -1 / Math.sqrt(784),
       maxval: 1 / Math.sqrt(784),
     });
-    const b1 = np.linspace(-1, 1, 128);
-    const w2 = random.uniform(k2, [128, 128], {
+    const b1 = random.uniform(k12, [128], {
+      minval: -1 / Math.sqrt(784),
+      maxval: 1 / Math.sqrt(784),
+    });
+    const w2 = random.uniform(k21, [128, 128], {
       minval: -1 / Math.sqrt(128),
       maxval: 1 / Math.sqrt(128),
     });
-    const b2 = np.linspace(-1, 1, 128);
-    const w3 = random.uniform(k3, [128, 10], {
+    const b2 = random.uniform(k22, [128], {
       minval: -1 / Math.sqrt(128),
       maxval: 1 / Math.sqrt(128),
     });
-    const b3 = np.zeros([10]);
+    const w3 = random.uniform(k31, [128, 10], {
+      minval: -1 / Math.sqrt(128),
+      maxval: 1 / Math.sqrt(128),
+    });
+    const b3 = random.uniform(k32, [10], {
+      minval: -1 / Math.sqrt(128),
+      maxval: 1 / Math.sqrt(128),
+    });
     const params = { w1, b1, w2, b2, w3, b3 };
     // Wait for all the arrays to be created on the device.
     await Promise.all(tree.leaves(params).map((ar) => ar.ref.wait()));
