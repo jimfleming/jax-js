@@ -21,7 +21,7 @@
   ) {
     const Asq = A.ref.mul(A.ref);
     const Bsq = B.ref.mul(B.ref);
-    V = V.add(np.where(Asq.ref.add(Bsq.ref).less(100), 1, 0));
+    V = V.add(Asq.ref.add(Bsq.ref).less(100).astype(np.float32));
     const A2 = np.clip(Asq.sub(Bsq).add(X), -50, 50);
     const B2 = np.clip(A.mul(B).mul(2).add(Y), -50, 50);
     return [A2, B2, V];
