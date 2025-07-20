@@ -26,9 +26,9 @@
   }
 
   type Params = {
-    w1: np.Array; // [784, 1024]
-    b1: np.Array; // [1024]
-    w2: np.Array; // [1024, 128]
+    w1: np.Array; // [784, 512]
+    b1: np.Array; // [512]
+    w2: np.Array; // [512, 128]
     b2: np.Array; // [128]
     w3: np.Array; // [128, 10]
     b3: np.Array; // [10]
@@ -36,21 +36,21 @@
 
   async function initializeParams(): Promise<Params> {
     const [k11, k12, k21, k22, k31, k32] = random.split(random.key(0), 6);
-    const w1 = random.uniform(k11, [784, 1024], {
+    const w1 = random.uniform(k11, [784, 512], {
       minval: -1 / Math.sqrt(784),
       maxval: 1 / Math.sqrt(784),
     });
-    const b1 = random.uniform(k12, [1024], {
+    const b1 = random.uniform(k12, [512], {
       minval: -1 / Math.sqrt(784),
       maxval: 1 / Math.sqrt(784),
     });
-    const w2 = random.uniform(k21, [1024, 128], {
-      minval: -1 / Math.sqrt(1024),
-      maxval: 1 / Math.sqrt(1024),
+    const w2 = random.uniform(k21, [512, 128], {
+      minval: -1 / Math.sqrt(512),
+      maxval: 1 / Math.sqrt(512),
     });
     const b2 = random.uniform(k22, [128], {
-      minval: -1 / Math.sqrt(1024),
-      maxval: 1 / Math.sqrt(1024),
+      minval: -1 / Math.sqrt(512),
+      maxval: 1 / Math.sqrt(512),
     });
     const w3 = random.uniform(k31, [128, 10], {
       minval: -1 / Math.sqrt(128),
@@ -390,7 +390,7 @@
                   <span class="w-4 text-right">{i}:</span>
                   <span
                     class="ml-1 bg-gray-400 h-3 rounded-sm"
-                    style:width="{80 * prob}%"
+                    style:width="{72 * prob}%"
                   ></span>
                   <span class="ml-2">
                     {(prob * 100).toFixed(1)}%
