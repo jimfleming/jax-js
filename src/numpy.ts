@@ -245,12 +245,7 @@ export function argmin(
   const shape = a.shape;
   const isMax = equal(a, min(a.ref, axis, { keepDims: true }));
   const length = scalar(shape[axis], { dtype: int32, device: a.device });
-  const idx = where(
-    // TODO: Simplify to just isMax.astype(int32) when we have that.
-    isMax,
-    scalar(1, { dtype: int32, device: a.device }),
-    scalar(0, { dtype: int32, device: a.device }),
-  ).mul(
+  const idx = isMax.astype(DType.Int32).mul(
     // Index by length-i instead of i, so we can take the max and get the first i.
     arange(shape[axis], 0, -1, { dtype: int32, device: a.device }).reshape([
       shape[axis],
@@ -281,12 +276,7 @@ export function argmax(
   const shape = a.shape;
   const isMax = equal(a, max(a.ref, axis, { keepDims: true }));
   const length = scalar(shape[axis], { dtype: int32, device: a.device });
-  const idx = where(
-    // TODO: Simplify to just isMax.astype(int32) when we have that.
-    isMax,
-    scalar(1, { dtype: int32, device: a.device }),
-    scalar(0, { dtype: int32, device: a.device }),
-  ).mul(
+  const idx = isMax.astype(DType.Int32).mul(
     // Index by length-i instead of i, so we can take the max and get the first i.
     arange(shape[axis], 0, -1, { dtype: int32, device: a.device }).reshape([
       shape[axis],
@@ -520,10 +510,20 @@ export function diag(v: ArrayLike, k = 0): Array {
     throw new TypeError(`k must be an integer, got ${k}`);
   if (a.ndim === 1) {
     const n = a.shape[0];
-    const ret = where(eye(n).equal(1), a, 0);
-    // TODO: pad() is unimplemented at this layer
-    if (k !== 0) throw new Error("diag() for 1D arrays only for k=0");
-    return ret;
+    const ret = where(eye(n).equal(1), a.ref, zerosLike(a));
+    if (k > 0) {
+      return pad(ret, [
+        [0, k],
+        [k, 0],
+      ]);
+    } else if (k < 0) {
+      return pad(ret, [
+        [-k, 0],
+        [0, -k],
+      ]);
+    } else {
+      return ret;
+    }
   } else if (a.ndim === 2) {
     return diagonal(a, k);
   } else {

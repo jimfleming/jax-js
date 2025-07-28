@@ -564,7 +564,7 @@ export abstract class Tracer {
       throw new TypeError(`offset must be an integer, got ${offset}`);
     if (axis1 === axis2) throw new Error("axis1 and axis2 must not be equal");
     // TODO: This is possible on the forward pass, but we need a custom JVP
-    // rule, so build it out of other primitives later.
+    // rule, so build it out of other primitives later. (reshape + stride)
     throw new Error("diagonal not implemented");
   }
 

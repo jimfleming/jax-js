@@ -49,6 +49,32 @@ suite.each(devices)("device:%s", (device) => {
         [0, 0, 3],
       ]);
     });
+
+    // test("fetches diagonal of 2D array", () => {
+    //   const x = np.array([
+    //     [1, 2, 3],
+    //     [4, 5, 6],
+    //     [7, 8, 9],
+    //   ]);
+    //   const y = np.diag(x.ref);
+    //   expect(y.js()).toEqual([1, 5, 9]);
+    //   const z = np.diag(x, 1);
+    //   expect(z.js()).toEqual([2, 6]);
+    // });
+
+    test("can construct off-diagonal", () => {
+      expect(np.diag(np.array([1, 2]), 1).js()).toEqual([
+        [0, 1, 0],
+        [0, 0, 2],
+        [0, 0, 0],
+      ]);
+      expect(np.diag(np.array([1, 2]), -2).js()).toEqual([
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [1, 0, 0, 0],
+        [0, 2, 0, 0],
+      ]);
+    });
   });
 
   suite("jax.numpy.arange()", () => {
@@ -392,21 +418,22 @@ suite.each(devices)("device:%s", (device) => {
       expect(z.shape).toEqual([2, 3, 4, 1, 4, 6]);
     });
 
-    test("200-256-200 matrix product", async ({ skip }) => {
-      if (device === "cpu") skip();
-      const x = np
-        .arange(200)
-        .astype(np.float32)
-        .reshape([200, 1])
-        .mul(np.ones([200, 256]));
-      const y = np.ones([256, 200]);
-      await Promise.all([x.ref.data(), y.ref.data()]);
-      const buf = await np.dot(x, y).data();
-      expect(buf.length).toEqual(200 * 200);
-      expect(buf[0]).toEqual(0);
-      expect(buf[200]).toEqual(256);
-      expect(buf[200 * 200 - 1]).toEqual(199 * 256);
-    });
+    if (device !== "cpu") {
+      test("200-256-200 matrix product", async () => {
+        const x = np
+          .arange(200)
+          .astype(np.float32)
+          .reshape([200, 1])
+          .mul(np.ones([200, 256]));
+        const y = np.ones([256, 200]);
+        await Promise.all([x.ref.data(), y.ref.data()]);
+        const buf = await np.dot(x, y).data();
+        expect(buf.length).toEqual(200 * 200);
+        expect(buf[0]).toEqual(0);
+        expect(buf[200]).toEqual(256);
+        expect(buf[200 * 200 - 1]).toEqual(199 * 256);
+      });
+    }
 
     // This test observes a past tuning / shape tracking issue where indices
     // would be improperly calculated applying the Unroll optimization.

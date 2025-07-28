@@ -225,12 +225,13 @@ suite.each(devices)("device:%s", (device) => {
 
   // This checks to make sure that index calculations don't suddenly break for
   // large arrays, covering workgroups > 65535 in WebGPU for instance.
-  test("large array dispatch", async ({ skip }) => {
-    if (device === "cpu") skip("too slow on CPU backend");
-    const x = ones([100, 1000, 1000], { dtype: DType.Int32 }); // 100M elements
-    await x.ref.wait();
-    expect(await x.sum().jsAsync()).toEqual(100_000_000);
-  });
+  if (device !== "cpu") {
+    test("large array dispatch", async () => {
+      const x = ones([100, 1000, 1000], { dtype: DType.Int32 }); // 100M elements
+      await x.ref.wait();
+      expect(await x.sum().jsAsync()).toEqual(100_000_000);
+    });
+  }
 
   test("iterate over an array", () => {
     const [a, b] = array([
