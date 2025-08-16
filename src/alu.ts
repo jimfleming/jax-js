@@ -1,6 +1,6 @@
 import { PPrint } from "./pprint";
 import { ShapeTracker } from "./shape";
-import { clamp, FpHash, FpHashable, strip1 } from "./utils";
+import { clamp, FpHash, FpHashable, gcd, strip1 } from "./utils";
 
 export enum DType {
   Float32 = "float32",
@@ -392,11 +392,59 @@ export class AluExp implements FpHashable {
     return this.#computeRange()[1];
   }
 
+  /** Largest known integer that divides self. */
+  constFactor(): number {
+    if (this.op === AluOp.Const) return Math.abs(this.arg);
+    if (this.op === AluOp.Add)
+      return gcd(this.src[0].constFactor(), this.src[1].constFactor());
+    if (this.op === AluOp.Mul) {
+      if (this.src[0].op === AluOp.Const) return Math.abs(this.src[0].arg);
+      if (this.src[1].op === AluOp.Const) return Math.abs(this.src[1].arg);
+    }
+    return 1;
+  }
+  /**
+   * Checks if divisible by an integer v and returns the quotient if it is, or
+   * `null` if it's not divisible.
+   */
+  divides(v: number): AluExp | null {
+    if (v === 1) return this;
+    if (this.op === AluOp.Const && this.arg % v === 0)
+      return AluExp.const(this.dtype, this.arg / v);
+    if (this.op === AluOp.Add) {
+      const a = this.src[0].divides(v);
+      if (a !== null) {
+        const b = this.src[1].divides(v);
+        if (b !== null) return AluExp.add(a, b);
+      }
+    }
+    if (this.op === AluOp.Mul) {
+      const a = this.src[0].divides(v);
+      if (a !== null) return AluExp.mul(a, this.src[1]);
+      const b = this.src[1].divides(v);
+      if (b !== null) return AluExp.mul(this.src[0], b);
+    }
+    return null;
+  }
+
   #isConstInt(): boolean {
     return (
       this.op === AluOp.Const &&
       (this.dtype === DType.Int32 || this.dtype === DType.Uint32)
     );
+  }
+
+  /**
+   * Get all expressions by deeply matching an operation.
+   *
+   * For example: `((2+(3*5))+4).splitOp(+) -> [2,(3*5),4]`.
+   */
+  *splitOp(sep: AluOp): IterableIterator<AluExp> {
+    if (this.op === sep) {
+      for (const src of this.src) {
+        yield* src.splitOp(sep);
+      }
+    } else yield this;
   }
 
   /**
@@ -465,6 +513,30 @@ export class AluExp implements FpHashable {
       } else if (b.op === AluOp.Const && b.arg === -1) {
         return new AluExp(opNeg, this.dtype, [src[0], a]);
       }
+    }
+
+    // Where(cond, 1, 0) => Cast(ty, cond)
+    if (
+      op === AluOp.Where &&
+      src.slice(1).every((s, i) => s.op === AluOp.Const && s.arg === 1 - i)
+    ) {
+      return AluExp.cast(this.dtype, src[0]);
+    }
+
+    // No-op comparisons.
+    if (op === AluOp.Cmplt) {
+      if (src[0].min >= src[1].max) return AluExp.const(DType.Bool, false);
+      if (src[0].max < src[1].min) return AluExp.const(DType.Bool, true);
+    }
+    if (op === AluOp.Cmpne) {
+      if (src[0].max < src[1].min || src[0].min > src[1].max)
+        return AluExp.const(DType.Bool, true);
+    }
+
+    // Select statement.
+    if (op === AluOp.Where) {
+      if (src[0].max === 0) return src[2];
+      if (src[0].min === 1) return src[1];
     }
 
     // Shape tracking ops (can be made more general).
@@ -633,28 +705,122 @@ export class AluExp implements FpHashable {
       }
     }
 
-    // Where(cond, 1, 0) => Cast(ty, cond)
-    if (
-      op === AluOp.Where &&
-      src.slice(1).every((s, i) => s.op === AluOp.Const && s.arg === 1 - i)
-    ) {
-      return AluExp.cast(this.dtype, src[0]);
-    }
+    // Deep rules that match iteratively, based on tinygrad's symbolic.py.
+    //
+    // These are needed to simplify expressions like pool() in conv2d. Otherwise
+    // the resulting expressions are complex and slow.
 
-    // No-op comparisons.
-    if (op === AluOp.Cmplt) {
-      if (src[0].min >= src[1].max) return AluExp.const(DType.Bool, false);
-      if (src[0].max < src[1].min) return AluExp.const(DType.Bool, true);
-    }
-    if (op === AluOp.Cmpne) {
-      if (src[0].max < src[1].min || src[0].min > src[1].max)
-        return AluExp.const(DType.Bool, true);
-    }
+    if (op === AluOp.Mod || (op === AluOp.Idiv && src[1].#isConstInt())) {
+      const [x, y] = src;
 
-    // Select statement.
-    if (op === AluOp.Where) {
-      if (src[0].max === 0) return src[2];
-      if (src[0].min === 1) return src[1];
+      // divide_by_gcd: https://github.com/tinygrad/tinygrad/blob/d1224a7/tinygrad/uop/symbolic.py#L190
+      {
+        const factors: number[] = [];
+        const terms: AluExp[] = [];
+        for (const u of x.splitOp(AluOp.Add)) {
+          const factor = u.constFactor();
+          factors.push(factor);
+          terms.push(u.divides(factor)!);
+        }
+        const g = gcd(y.arg, ...factors);
+        if (g !== 1) {
+          let ret = new AluExp(op, this.dtype, [
+            factors
+              .map((f, i) =>
+                AluExp.mul(AluExp.const(terms[i].dtype, f / g), terms[i]),
+              )
+              .reduceRight((a, x) => AluExp.add(x, a)),
+            AluExp.const(y.dtype, y.arg / g),
+          ]);
+          if (op === AluOp.Mod)
+            ret = AluExp.mul(ret, AluExp.const(this.dtype, g));
+          return ret.simplify(cache);
+        }
+      }
+
+      // simplify_remainder: https://github.com/tinygrad/tinygrad/blob/d1224a7/tinygrad/uop/symbolic.py#L208
+      if (y.arg > 0) {
+        let [xNoConst, constVal] = [x, 0];
+        if (x.op === AluOp.Add && x.src[1].op === AluOp.Const) {
+          [xNoConst, constVal] = [x.src[0], x.src[1].arg];
+        }
+
+        const terms: AluExp[] = [];
+        const factors: number[] = [];
+        for (const u of xNoConst.splitOp(AluOp.Add)) {
+          const f = u.constFactor();
+          const divided = u.divides(f);
+          terms.push(divided ?? u);
+          factors.push(divided ? f : 1);
+        }
+
+        const quotients = factors.map((f) => Math.floor(f / y.arg));
+        const remainders = factors.map((f) => f % y.arg);
+        const gcdVal = remainders.reduce((g, r) => gcd(g, r), y.arg);
+
+        if (
+          constVal % y.arg !== constVal ||
+          gcdVal !== 1 ||
+          remainders.some(
+            (r, i) => r === 0 || (r !== factors[i] && op === AluOp.Mod),
+          )
+        ) {
+          let quo = AluExp.const(x.dtype, Math.floor(constVal / y.arg));
+          let rem = AluExp.const(
+            x.dtype,
+            Math.floor((constVal % y.arg) / gcdVal),
+          );
+
+          for (let i = 0; i < terms.length; i++) {
+            if (op === AluOp.Idiv && remainders[i] !== 0) {
+              rem = AluExp.add(
+                rem,
+                AluExp.mul(
+                  AluExp.const(x.dtype, Math.floor(factors[i] / gcdVal)),
+                  terms[i],
+                ),
+              );
+            } else {
+              rem = AluExp.add(
+                rem,
+                AluExp.mul(
+                  AluExp.const(x.dtype, Math.floor(remainders[i] / gcdVal)),
+                  terms[i],
+                ),
+              );
+              quo = AluExp.add(
+                quo,
+                AluExp.mul(AluExp.const(x.dtype, quotients[i]), terms[i]),
+              );
+            }
+          }
+
+          if (
+            !((x.min < 0 || rem.min < 0) && remainders.some((r) => r !== 0))
+          ) {
+            if (op === AluOp.Mod) {
+              return AluExp.add(
+                AluExp.mul(
+                  AluExp.const(x.dtype, gcdVal),
+                  AluExp.mod(
+                    rem,
+                    AluExp.const(x.dtype, Math.floor(y.arg / gcdVal)),
+                  ),
+                ),
+                AluExp.const(x.dtype, constVal % gcdVal),
+              ).simplify(cache);
+            } else {
+              return AluExp.add(
+                AluExp.idiv(
+                  rem,
+                  AluExp.const(x.dtype, Math.floor(y.arg / gcdVal)),
+                ),
+                quo,
+              ).simplify(cache);
+            }
+          }
+        }
+      }
     }
 
     // If any src was simplified, should construct a new expression.

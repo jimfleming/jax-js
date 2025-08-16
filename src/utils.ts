@@ -37,6 +37,14 @@ export function prod(arr: number[]): number {
   return arr.reduce((acc, x) => acc * x, 1);
 }
 
+export function gcd(...values: number[]): number {
+  let a = 0;
+  for (let b of values) {
+    while (b !== 0) [a, b] = [b, a % b];
+  }
+  return Math.abs(a);
+}
+
 /** Shorthand for integer division, like in Python. */
 export function intdiv(a: number, b: number): number {
   return Math.floor(a / b);
