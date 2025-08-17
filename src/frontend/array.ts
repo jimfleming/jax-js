@@ -21,7 +21,12 @@ import {
   recursiveFlatten,
   rep,
 } from "../utils";
-import { checkConvShape, prepareConv } from "./convolution";
+import {
+  checkConvShape,
+  pool,
+  poolTranspose,
+  prepareConv,
+} from "./convolution";
 import {
   CompareOp,
   getAval,
@@ -785,6 +790,16 @@ export class Array extends Tracer {
       [Primitive.Reduce]([x], { op, axis }) {
         if (axis.length === 0) return [x];
         return [x.#moveAxesDown(axis).#reduce(op)];
+      },
+      [Primitive.Pool]([x], { window, strides }) {
+        const st = pool(x.#st, window, strides);
+        return [x.#reshape(st)];
+      },
+      [Primitive.PoolTranspose]([x], { inShape, window, strides }) {
+        const n = inShape.length;
+        let st = poolTranspose(x.#st, inShape, window, strides);
+        st = st.reshape([...st.shape.slice(0, n), prod(st.shape.slice(n))]);
+        return [x.#reshape(st).#reduce(AluOp.Add)];
       },
       [Primitive.Dot]([x, y]) {
         return [

@@ -1,4 +1,4 @@
-import { AluOp, isFloatDtype } from "../alu";
+import { AluOp, DType, isFloatDtype } from "../alu";
 import {
   JsTree,
   flatten as treeFlatten,
@@ -201,15 +201,15 @@ const jvpRules: { [P in Primitive]: JvpRule<P> } = {
       // multiple minima, it's not well-defined which one to take as the tangent
       // vector (sharp discontinuity), so we average over all of them.
       const notMin = notEqual(x, broadcast(primal.ref, x.shape, axis));
-      const minCount = where(notMin.ref, 0.0, 1.0).sum(axis);
-      const tangent = where(notMin, op === AluOp.Min ? 0 : 0, dx)
-        .sum(axis)
-        .mul(reciprocal(minCount));
+      const minCount = notMin.ref.astype(DType.Float32).sum(axis);
+      const tangent = where(notMin, 0.0, dx).sum(axis).div(minCount);
       return [[primal], [tangent]];
     } else {
       throw new Error(`JVP rule not implemented for reduce op: ${op}`);
     }
   },
+  [Primitive.Pool]: linearTangentsJvp(Primitive.Pool),
+  [Primitive.PoolTranspose]: linearTangentsJvp(Primitive.PoolTranspose),
   [Primitive.Dot]: bilinearTangentsJvp(Primitive.Dot),
   [Primitive.Conv]: bilinearTangentsJvp(Primitive.Conv),
   [Primitive.Compare]: zeroTangentsJvp(Primitive.Compare),

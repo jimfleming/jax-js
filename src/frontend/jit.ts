@@ -6,7 +6,7 @@ import { PPrint } from "../pprint";
 import { ShapeTracker, unravelAlu } from "../shape";
 import { DEBUG, deepEqual, FpHash, prod, range, rep } from "../utils";
 import { aluCompare, Array, generalBroadcast, PendingExecute } from "./array";
-import { prepareConv } from "./convolution";
+import { pool, poolTranspose, prepareConv } from "./convolution";
 import { Primitive, PrimitiveParams, ShapedArray } from "./core";
 import { Jaxpr, Lit, Var } from "./jaxpr";
 
@@ -395,13 +395,18 @@ type JitRule<P extends Primitive> = (
 function reshapeViews(
   exp: AluExp,
   mapping: (st: ShapeTracker) => ShapeTracker | undefined,
+  reduceAxis: boolean = false,
 ): AluExp {
   return exp.rewrite((exp) => {
     if (exp.op === AluOp.GlobalView) {
       const [gid, st]: [number, ShapeTracker] = exp.arg;
       const newSt = mapping(st);
       if (newSt) {
-        const indices = unravelAlu(newSt.shape, AluVar.gidx);
+        const indices = reduceAxis
+          ? unravelAlu(newSt.shape.slice(0, -1), AluVar.gidx).concat(
+              AluVar.ridx,
+            )
+          : unravelAlu(newSt.shape, AluVar.gidx);
         return AluExp.globalView(exp.dtype, gid, newSt, indices);
       }
     }
@@ -497,19 +502,25 @@ const jitRules: { [P in Primitive]: JitRule<P> } = {
     const reductionSize = prod(shiftedAxes.map((ax) => as.shape[ax]));
     newShape.push(reductionSize);
 
-    a = a.rewrite((exp) => {
-      if (exp.op === AluOp.GlobalView) {
-        const [gid, st]: [number, ShapeTracker] = exp.arg;
-        const newSt = st
-          .permute(keptAxes.concat(shiftedAxes))
-          .reshape(newShape);
-        const indices = unravelAlu(newShape.slice(0, -1), AluVar.gidx);
-        indices.push(AluVar.ridx);
-        return AluExp.globalView(exp.dtype, gid, newSt, indices);
-      }
-    });
-
+    const perm = keptAxes.concat(shiftedAxes);
+    a = reshapeViews(a, (st) => st.permute(perm).reshape(newShape), true);
     const reduction = new Reduction(a.dtype, op, reductionSize);
+    return new Kernel(nargs, size, a, reduction);
+  },
+  [Primitive.Pool]: reshapeJit((st, { window, strides }) =>
+    pool(st, window, strides),
+  ),
+  [Primitive.PoolTranspose](nargs, [a], [as], { inShape, window, strides }) {
+    let stX = poolTranspose(
+      ShapeTracker.fromShape(as.shape),
+      inShape,
+      window,
+      strides,
+    );
+    const size = prod(inShape);
+    stX = stX.reshape([...inShape, prod(stX.shape.slice(inShape.length))]); // Combine all reduce axes.
+    a = reshapeViews(a, (st) => st.compose(stX), true);
+    const reduction = new Reduction(a.dtype, AluOp.Add, prod(window));
     return new Kernel(nargs, size, a, reduction);
   },
   [Primitive.Dot](nargs, [a, b], [as, bs]) {
@@ -589,7 +600,12 @@ function splitGraphDataflow(backend: Backend, jaxpr: Jaxpr): Set<Var> {
       p1NextBlack.set(v, v);
     }
   }
-  const reducePrimitives = [Primitive.Reduce, Primitive.Dot, Primitive.Conv];
+  const reducePrimitives = [
+    Primitive.Reduce,
+    Primitive.PoolTranspose,
+    Primitive.Dot,
+    Primitive.Conv,
+  ];
   for (let i = jaxpr.eqns.length - 1; i >= 0; i--) {
     const eqn = jaxpr.eqns[i];
     if (

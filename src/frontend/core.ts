@@ -41,6 +41,8 @@ export enum Primitive {
   Reduce = "reduce",
   Dot = "dot", // sum(x*y, axis=-1)
   Conv = "conv", // see lax.conv_general_dilated
+  Pool = "pool",
+  PoolTranspose = "pool_transpose",
   Compare = "compare",
   Where = "where",
   Transpose = "transpose",
@@ -58,6 +60,12 @@ interface PrimitiveParamsImpl extends Record<Primitive, Record<string, any>> {
   [Primitive.Bitcast]: { dtype: DType };
   [Primitive.Reduce]: { op: AluOp; axis: number[] };
   [Primitive.Conv]: ConvParams;
+  [Primitive.Pool]: { window: number[]; strides: number[] };
+  [Primitive.PoolTranspose]: {
+    inShape: number[];
+    window: number[];
+    strides: number[];
+  };
   [Primitive.Compare]: { op: CompareOp };
   [Primitive.Transpose]: { perm: number[] };
   [Primitive.Broadcast]: { shape: number[]; axis: number[] };

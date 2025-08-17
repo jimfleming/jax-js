@@ -683,6 +683,19 @@ const transposeRules: Partial<{ [P in Primitive]: TransposeRule<P> }> = {
       throw new NonlinearError(Primitive.Reduce);
     }
   },
+  [Primitive.Pool]([ct], [x], { window, strides }) {
+    if (!(x instanceof UndefPrimal)) throw new NonlinearError(Primitive.Pool);
+    return bind(Primitive.PoolTranspose, [ct], {
+      inShape: x.aval.shape,
+      window,
+      strides,
+    });
+  },
+  [Primitive.PoolTranspose]([ct], [x], { window, strides }) {
+    if (!(x instanceof UndefPrimal))
+      throw new NonlinearError(Primitive.PoolTranspose);
+    return bind(Primitive.Pool, [ct], { window, strides });
+  },
   [Primitive.Dot]([ct], [x, y]) {
     if (x instanceof UndefPrimal === y instanceof UndefPrimal)
       throw new NonlinearError(Primitive.Dot);

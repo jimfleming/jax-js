@@ -252,7 +252,7 @@ const vmapRules: Partial<{ [P in Primitive]: VmapRule<P> }> = {
     const z = dot(x, y);
     return [[z], [z.ndim - 1]]; // The batch axis is now at the end.
   },
-  // TODO: conv
+  // TODO: conv, pool, pool_transpose
   [Primitive.Compare](axisSize, args, dims, { op }) {
     return broadcastBatcher((x, y) => compare(x, y, op))(
       axisSize,

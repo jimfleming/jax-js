@@ -7,7 +7,7 @@
 //  - https://github.com/jax-ml/jax/blob/main/jax/_src/lax/convolution.py
 
 import { Pair, ShapeTracker } from "../shape";
-import { prod, range, rep, zipn } from "../utils";
+import { deepEqual, prod, range, rep, zipn } from "../utils";
 
 /** Definition of a general dilated convolution. Should be valid on creation. */
 export interface ConvParams {
@@ -98,10 +98,36 @@ export function checkConvShape(
   return outShape;
 }
 
+export function checkPoolShape(
+  inShape: number[],
+  window: number[],
+  strides: number[],
+): number[] {
+  if (strides.length !== window.length)
+    throw new Error("pool() strides != window dims");
+  if (window.length > inShape.length)
+    throw new Error("pool() window has more dimensions than input");
+
+  const outShape = inShape.slice(0, inShape.length - window.length);
+  for (let i = 0; i < window.length; i++) {
+    const k = window[i];
+    const s = strides[i];
+    const size = inShape[inShape.length - window.length + i];
+    if (k <= 0 || !Number.isInteger(k))
+      throw new Error(`pool() window[${i}] must be a positive integer`);
+    if (k > size)
+      throw new Error(`pool() window[${i}]=${k} > input size ${size}`);
+    if (s <= 0 || !Number.isInteger(s))
+      throw new Error(`pool() strides[${i}] must be a positive integer`);
+    outShape.push(Math.ceil((size - k + 1) / s));
+  }
+  return outShape.concat(window);
+}
+
 /**
- * Takes a shape tracker and reshapes it such that and a kernel size `ks`, then
- * reshapes the last `ks.length` dimensions into `2 * ks.length` dimensions by
- * treating them as spatial dimensions convolved with a kernel.
+ * Takes a shape tracker and a kernel size `ks`, then reshapes it so the last
+ * `ks.length` dimensions become `2 * ks.length` dimensions by treating them as
+ * spatial dimensions convolved with a kernel.
  *
  * The resulting array can be multiplied with a kernel of shape `ks`, then
  * reduced along the last `ks.length` dimensions for a convolution.
@@ -119,6 +145,11 @@ export function pool(
     throw new Error("pool() called with too many dimensions");
   if (typeof strides === "number") strides = rep(ks.length, strides);
   if (typeof dilation === "number") dilation = rep(ks.length, dilation);
+
+  if (strides.some((s) => s <= 0 || !Number.isInteger(s)))
+    throw new Error("pool() strides must be positive integers");
+  if (dilation.some((d) => d <= 0 || !Number.isInteger(d)))
+    throw new Error("pool() dilation must be positive integers");
 
   const noop = st.shape.slice(0, -ks.length);
 
@@ -185,6 +216,87 @@ export function pool(
     ...ks.map((_, j) => noop.length + 2 * j + 1), // o_ dimensions
     ...ks.map((_, j) => noop.length + 2 * j), // k_ dimensions
   ]);
+
+  return st;
+}
+
+/**
+ * Perform the transpose of pool, directly undo-ing a pool() operation.
+ *
+ * Note that since pool repeats the input, the transpose operation technically
+ * should include a sum reduction. This function doesn't perform the reduction,
+ * which should be done on the last `k` axes of the returned shape.
+ */
+export function poolTranspose(
+  st: ShapeTracker,
+  inShape: number[],
+  ks: number[],
+  strides: number | number[] = 1,
+  dilation: number | number[] = 1,
+): ShapeTracker {
+  if (ks.length === 0) return st;
+
+  if (typeof strides === "number") strides = rep(ks.length, strides);
+  if (typeof dilation === "number") dilation = rep(ks.length, dilation);
+
+  const noop = inShape.slice(0, -ks.length);
+
+  const i_ = inShape.slice(-ks.length);
+  const s_ = strides;
+  const d_ = dilation;
+  const o_ = zipn(i_, d_, ks, s_).map(([i, d, k, s]) =>
+    Math.ceil((i - d * (k - 1)) / s),
+  );
+
+  if (!deepEqual(o_, st.shape.slice(noop.length, noop.length + ks.length))) {
+    throw new Error("poolTranspose() called with mismatched output shape");
+  }
+
+  const f_ = zipn(o_, s_, i_, d_, ks).map(
+    ([o, s, i, d, k]) => 1 + Number(o * s > i - d * (k - 1)),
+  );
+
+  const kidf = zipn(ks, i_, d_, f_);
+  const kos = zipn(ks, o_, s_);
+
+  // Undo permute to move reduction dimensions (k_) to the end.
+  st = st.permute([
+    ...range(noop.length),
+    ...ks.flatMap((_, j) => [noop.length + ks.length + j, noop.length + j]),
+  ]);
+
+  // Undo taking every s-th element (stride).
+  st = st
+    .reshape([...noop, ...kos.flatMap(([k, o]) => [k, o, 1])])
+    .expand([...noop, ...kos.flat(1)]);
+  st = st.reshape([...noop, ...kos.flatMap(([k, o, s]) => [k, o * s])]).pad([
+    ...noop.map<Pair>(() => [0, 0]),
+    ...kidf.flatMap<Pair>(([_k, i, d, f], j) => [
+      [0, 0],
+      [0, i * f + d - o_[j] * s_[j]],
+    ]),
+  ]);
+
+  // Undo taking repeats to make shrinking possible.
+  st = st
+    .reshape([...noop, ...kidf.map(([k, i, d, f]) => k * (i * f + d))])
+    .pad([
+      ...noop.map<Pair>(() => [0, 0]),
+      ...kidf.map<Pair>(([k, i, d, f]) => [
+        0,
+        Math.ceil((k * (i * f + d)) / i) * i - k * (i * f + d),
+      ]),
+    ]);
+  st = st
+    .reshape([
+      ...noop,
+      ...kidf.flatMap(([k, i, d, f]) => [Math.ceil((k * (i * f + d)) / i), i]),
+    ])
+    .permute([
+      ...range(noop.length),
+      ...ks.map((_, j) => noop.length + 2 * j + 1), // input dimensions
+      ...ks.map((_, j) => noop.length + 2 * j), // repeat dimensions (to be reduced)
+    ]);
 
   return st;
 }

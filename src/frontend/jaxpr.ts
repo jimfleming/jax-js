@@ -16,7 +16,7 @@ import {
   zip,
 } from "../utils";
 import { Array, generalBroadcast, pureArray, scalar } from "./array";
-import { checkConvShape } from "./convolution";
+import { checkConvShape, checkPoolShape } from "./convolution";
 import {
   bind,
   flattenFun,
@@ -741,6 +741,19 @@ export const abstractEvalRules: { [P in Primitive]: AbstractEvalRule<P> } = {
     const axisSet = new Set(axis);
     const newShape = x.shape.filter((_, i) => !axisSet.has(i));
     return [new ShapedArray(newShape, x.dtype)];
+  },
+  [Primitive.Pool]([x], { window, strides }) {
+    const shape = checkPoolShape(x.shape, window, strides);
+    return [new ShapedArray(shape, x.dtype)];
+  },
+  [Primitive.PoolTranspose]([x], { inShape, window, strides }) {
+    const shape = checkPoolShape(inShape, window, strides);
+    if (!deepEqual(shape, x.shape)) {
+      throw new TypeError(
+        `PoolTranspose shape mismatch: expected ${JSON.stringify(shape)}, got ${JSON.stringify(x.shape)}`,
+      );
+    }
+    return [new ShapedArray(inShape, x.dtype)];
   },
   [Primitive.Dot]([x, y]) {
     if (x.dtype !== y.dtype)
