@@ -4,6 +4,9 @@ Utility package for `jax-js` that can load tensors from various formats and cach
 
 - [OPFS](#opfs)
 - [Safetensors](#safetensors)
+- [Tokenizers](#tokenizers)
+
+This has no dependencies and can be used independently of the main `@jax-js/jax` library.
 
 ## OPFS
 
@@ -42,7 +45,7 @@ import { cachedFetch } from "@jax-js/loaders";
 const url =
   "https://huggingface.co/ekzhang/jax-js-models/resolve/main/mobileclip_s0.safetensors";
 
-await cachedFetch(url); // Also takes `RequestInit`
+await cachedFetch(url); // Also takes `RequestInit` as second parameter
 ```
 
 ## Safetensors
@@ -52,6 +55,21 @@ A loader for [Safetensors](https://github.com/huggingface/safetensors) files, wh
 ```ts
 import { safetensors } from "@jax-js/loaders";
 
-const buf = await fetch("model.safetensors")).then((resp) => resp.bytes());
+const buf = await fetch("model.safetensors").then((resp) => resp.bytes());
 safetensors.parse(buf); // => { tensors: { ... } };
+```
+
+## Tokenizers
+
+Tokenization for preparing the inputs to a model. These implement byte-pair encoding (BPE) and include common configurations for models like CLIP.
+
+Since these tokenizer definitions can be nontrivially large (~1 MB), their data is fetched from CDN as needed.
+
+```ts
+import { tokenizers } from "@jax-js/loaders";
+
+const tokenizer = await tokenizers.get("clip");
+
+const buf = tokenizer.encode("Hello, world!"); // => Uint32Array [ 49406, 3306, 267, 1002, ... ]
+tokenizer.decode(buf); // => "Hello, world!"
 ```
