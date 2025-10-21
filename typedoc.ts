@@ -29,5 +29,16 @@ for (const pkg of await readdir("packages")) {
 
 // Merge all package docs into a single HTML output.
 await sh(
-  `pnpm typedoc --name jax-js --entryPointStrategy merge --plugin typedoc-theme-fresh --theme fresh "docs-json/*.json"`,
+  String.raw`
+pnpm typedoc \
+  --name jax-js \
+  --entryPointStrategy merge \
+  --readme none \
+  --searchInDocuments \
+  --searchInComments \
+  --navigation.includeFolders false \
+  --plugin typedoc-theme-fresh \
+  --theme fresh \
+  "docs-json/*.json"
+`,
 );
