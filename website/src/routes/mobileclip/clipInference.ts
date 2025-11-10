@@ -1,6 +1,50 @@
 import { nn, numpy as np } from "@jax-js/jax";
+import { safetensors, WeightMapper } from "@jax-js/loaders";
 
 // MobileCLIP2 model weights interfaces and forward pass.
+
+export interface MobileCLIP {
+  text: MobileCLIPTextEncoder;
+  visual: any; // TODO
+  logitScale: np.Array;
+}
+
+const weightMapper = new WeightMapper({
+  exact: {
+    logit_scale: "logitScale",
+    "text.token_embedding.weight": "text.tokenEmbedding",
+    "text.positional_embedding": "text.positionalEmbedding",
+    "text.text_projection": "text.textProjection",
+  },
+  prefix: {
+    "text.transformer.resblocks.": "text.transformer.",
+  },
+  substring: {
+    ".ln_final.": ".lnFinal.",
+    ".ln_1.": ".ln1.",
+    ".ln_2.": ".ln2.",
+    ".mlp.c_fc.": ".mlpUp.",
+    ".mlp.c_proj.": ".mlpDown.",
+    ".attn.in_proj_": ".attn.qkvProj.",
+    ".attn.out_proj.": ".attn.outProj.",
+  },
+});
+
+export function fromSafetensors(file: safetensors.File): MobileCLIP {
+  const mappedWeights = weightMapper.mapObject(file.tensors);
+  const hydrated: Record<string, np.Array> = {};
+  for (const [key, value] of Object.entries(mappedWeights)) {
+    console.log(key);
+    console.log(value);
+    hydrated[key] = np
+      .array(value.data as any, {
+        dtype: value.dtype === "F16" ? np.float16 : np.int32,
+        shape: value.shape,
+      })
+      .astype(np.float32);
+  }
+  return safetensors.toNested(hydrated);
+}
 
 export interface MobileCLIPTextEncoder {
   tokenEmbedding: np.Array;
@@ -20,21 +64,18 @@ export function runMobileCLIPTextEncoder(
   }: MobileCLIPTextEncoder,
   textTokens: np.Array,
 ): np.Array {
-  const batchSize = textTokens.shape[0];
-
   // Embed tokens and add positional embeddings
   let x = tokenEmbedding.slice(textTokens.ref); // [B, L, D]
   x = x.add(positionalEmbedding);
 
   for (const block of transformer) {
+    console.log("Running block", x.shape);
     x = runMobileCLIPTextBlock(block, x);
   }
   x = runLayerNorm(lnFinal, x.ref);
 
-  const finalFeatures = x.slice(
-    np.arange(batchSize),
-    np.argmax(textTokens, -1),
-  );
+  const finalFeatures = x.slice(np.argmax(textTokens, -1));
+  console.log("final matmul", finalFeatures.shape);
   return np.matmul(finalFeatures, textProjection); // [B, D_out]
 }
 
@@ -121,7 +162,7 @@ export interface Linear {
 }
 
 export function runLinear({ weight, bias }: Linear, x: np.Array): np.Array {
-  return x.mul(weight.transpose()).add(bias);
+  return np.dot(x, weight.transpose()).add(bias);
 }
 
 export interface LayerNorm {

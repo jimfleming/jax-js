@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { init, numpy as np, setDevice } from "@jax-js/jax";
   import { cachedFetch, opfs, safetensors, tokenizers } from "@jax-js/loaders";
   import { FileTextIcon, ImageIcon } from "lucide-svelte";
 
   import DownloadToast, {
     type Props as DownloadToastProps,
   } from "$lib/common/DownloadToast.svelte";
+  import { fromSafetensors, runMobileCLIPTextEncoder } from "./clipInference";
 
   const weightsUrl =
     "https://huggingface.co/ekzhang/jax-js-models/resolve/main/mobileclip2-s0.safetensors";
@@ -63,12 +65,24 @@
   async function main() {
     if (isDownloading) return;
 
+    await init("webgpu");
+    setDevice("webgpu");
+
     try {
       weights = await downloadClipWeights();
+      const model = fromSafetensors(weights);
+      console.log("-------- WEIGHTS --------");
       console.log(weights);
+      console.log("-------- MODEL --------");
+      console.log(model);
 
       const tokenizer = await tokenizers.get("clip");
       console.log(tokenizer.encode("hello world"));
+
+      const tokens = np.array(tokenizer.encode("hello world"));
+      const encoded = runMobileCLIPTextEncoder(model.text, tokens);
+      console.log("-------- ENCODED --------");
+      console.log(encoded.js());
     } catch (error) {
       console.error("Error in main:", error);
     }

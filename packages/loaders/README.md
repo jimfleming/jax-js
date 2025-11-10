@@ -73,3 +73,24 @@ const tokenizer = await tokenizers.get("clip");
 const buf = tokenizer.encode("Hello, world!"); // => Uint32Array [ 49406, 3306, 267, 1002, ... ]
 tokenizer.decode(buf); // => "Hello, world!"
 ```
+
+## WeightMapper
+
+Utility for translating object keys based on matching substrings or prefixes/suffixes, useful for loading model weights from a different format.
+
+```ts
+import { WeightMapper } from "@jax-js/loaders";
+
+const weightMapper = new WeightMapper({
+  prefix: {
+    "model.transformer.layers": "text_encoder.transformer",
+  },
+  suffix: {
+    ".up_proj": ".up.weight",
+    ".up_proj_bias": ".up.bias",
+  },
+  substring: {
+    ".qkv_fused.": ".qkv.",
+  },
+});
+```
