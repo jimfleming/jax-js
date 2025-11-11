@@ -66,11 +66,19 @@ export const makeJaxpr = jaxprModule.makeJaxpr as unknown as <
  *
  * The function will be compiled the first time it is called with a set of
  * argument shapes.
+ *
+ * **Options:**
+ * - `staticArgnums`: An array of argument indices to treat as static
+ *   (compile-time constant). These arguments must be hashable, won't be traced,
+ *   and different values will trigger recompilation.
+ * - `device`: The device to place the computation on. If not specified, the
+ *   computation will be placed on the default device.
  */
 export const jit = jaxprModule.jit as <
   F extends (...args: any[]) => JsTree<Array>,
 >(
   f: F,
+  opts?: jaxprModule.JitOpts,
 ) => (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
 
 /**

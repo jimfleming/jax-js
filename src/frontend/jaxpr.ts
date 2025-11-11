@@ -1,4 +1,5 @@
 import { byteWidth, DType } from "../alu";
+import { type Device } from "../backend";
 import { ArrayLike } from "../numpy";
 import { PPrint } from "../pprint";
 import {
@@ -852,12 +853,47 @@ export const abstractEvalRules: { [P in Primitive]: AbstractEvalRule<P> } = {
   },
 };
 
+function splitIdx(values: any[], argnums: Set<number>): [any[], any[]] {
+  const a: any[] = [];
+  const b: any[] = [];
+  for (let i = 0; i < values.length; i++) {
+    if (argnums.has(i)) a.push(values[i]);
+    else b.push(values[i]);
+  }
+  return [a, b];
+}
+
+function joinIdx(n: number, a: any[], b: any[], argnums: Set<number>): any[] {
+  const result: any[] = [];
+  let ai = 0;
+  let bi = 0;
+  for (let i = 0; i < n; i++) {
+    if (argnums.has(i)) result.push(a[ai++]);
+    else result.push(b[bi++]);
+  }
+  return result;
+}
+
+/** @inline */
+export type JitOpts = {
+  staticArgnums?: number[];
+  device?: Device; // TODO: Use backend properly
+};
+
 export function makeJaxpr(
   f: (...args: any[]) => any,
+  opts?: JitOpts,
 ): (...argsIn: any) => { jaxpr: Jaxpr; consts: Tracer[]; treedef: JsTreeDef } {
   return (...argsIn) => {
-    const [avalsIn, inTree] = treeFlatten(argsIn);
-    const [fFlat, outTree] = flattenFun(f, inTree);
+    const staticArgnums = new Set(opts?.staticArgnums ?? []);
+    const [staticArgs, shapedArgs] = splitIdx(argsIn, staticArgnums);
+
+    const [avalsIn, inTree] = treeFlatten(shapedArgs);
+    const [fFlat, outTree] = flattenFun((...dynamicArgs: any[]) => {
+      return f(
+        ...joinIdx(argsIn.length, staticArgs, dynamicArgs, staticArgnums),
+      );
+    }, inTree);
 
     const builder = new JaxprBuilder();
     using main = newMain(JaxprTrace, builder);
@@ -882,23 +918,25 @@ export function makeJaxpr(
 
 export function jit<F extends (...args: any[]) => any>(
   f: F,
+  opts?: JitOpts,
 ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F> {
   const cache = new Map<string, ReturnType<ReturnType<typeof makeJaxpr>>>();
+  const staticArgnums = new Set(opts?.staticArgnums ?? []);
 
   return ((...args) => {
-    const [argsFlat, inTree] = treeFlatten(args);
+    const [staticArgs, dynamicArgs] = splitIdx(args, staticArgnums);
 
+    const [argsFlat, inTree] = treeFlatten(dynamicArgs);
     const avalsInFlat = argsFlat.map((x) => ShapedArray.fromAval(getAval(x)));
-    const avalsIn = treeUnflatten(inTree, avalsInFlat);
+    const avalsIn = treeUnflatten(inTree, avalsInFlat) as any[];
 
-    const cacheKey = JSON.stringify(avalsIn);
+    const jaxprArgs = joinIdx(args.length, staticArgs, avalsIn, staticArgnums);
+    const cacheKey = JSON.stringify(jaxprArgs);
     const {
       jaxpr,
       consts,
       treedef: outTree,
-    } = runWithCache(cache, cacheKey, () =>
-      makeJaxpr(f)(...(avalsIn as any[])),
-    );
+    } = runWithCache(cache, cacheKey, () => makeJaxpr(f, opts)(...jaxprArgs));
 
     const outs = bind(
       Primitive.JitCall,

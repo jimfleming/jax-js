@@ -76,10 +76,7 @@ export function softSign(x: ArrayLike): Array {
  *
  * Reference: https://en.wikipedia.org/wiki/Swish_function
  */
-export function silu(x: ArrayLike): Array {
-  x = fudgeArray(x);
-  return x.ref.mul(sigmoid(x));
-}
+export const silu = jit((x: Array) => x.ref.mul(sigmoid(x)));
 
 /**
  * Sigmoid-weighted Linear Unit (SiLU) activation function, also known as

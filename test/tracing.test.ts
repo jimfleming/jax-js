@@ -262,6 +262,15 @@ suite("jax.jit()", () => {
     expect(a.js()).toEqual([20, 40, 30, 10]);
   });
 
+  test("supports staticArgnums", () => {
+    const f = jit((x: np.Array, idx: number) => x.slice(idx), {
+      staticArgnums: [1],
+    });
+    expect(f(np.arange(20), 0).js()).toEqual(0);
+    expect(f(np.arange(20), 3).js()).toEqual(3);
+    expect(f(np.array([30, 1, 20, 11]), 3).js()).toEqual(11);
+  });
+
   test("jit-of-jit", () => {
     const f = jit((x: np.Array) => x.ref.mul(x));
     const g = jit((x: np.Array) => f(f(x)));
