@@ -1,16 +1,22 @@
 <script lang="ts">
-  import { init, numpy as np, setDevice } from "@jax-js/jax";
+  import { init, jit, numpy as np, setDevice, tree } from "@jax-js/jax";
   import { cachedFetch, opfs, safetensors, tokenizers } from "@jax-js/loaders";
   import { FileTextIcon, ImageIcon } from "lucide-svelte";
 
   import DownloadToast, {
     type Props as DownloadToastProps,
   } from "$lib/common/DownloadToast.svelte";
-  import { fromSafetensors, runMobileCLIPTextEncoder } from "./clipInference";
+  import {
+    fromSafetensors,
+    type MobileCLIP,
+    runMobileCLIPTextEncoder,
+  } from "./clipInference";
 
   const weightsUrl =
     "https://huggingface.co/ekzhang/jax-js-models/resolve/main/mobileclip2-s0.safetensors";
   let weights: safetensors.File | null = null;
+  let model: MobileCLIP | null = null;
+  let tokenizer: tokenizers.BpeEncoding | null = null;
 
   let isDownloading = $state(false);
   let downloadState = $state<DownloadToastProps | null>(null);
@@ -62,6 +68,8 @@
     }
   }
 
+  const runEncoder = jit(runMobileCLIPTextEncoder);
+
   async function main() {
     if (isDownloading) return;
 
@@ -69,22 +77,29 @@
     setDevice("webgpu");
 
     try {
-      weights = await downloadClipWeights();
-      const model = fromSafetensors(weights);
-      console.log("-------- WEIGHTS --------");
-      console.log(weights);
-      console.log("-------- MODEL --------");
-      console.log(model);
+      if (!weights) {
+        weights = await downloadClipWeights();
+        console.log("-------- WEIGHTS --------");
+        console.log(weights);
+      }
+      if (!model) {
+        model = fromSafetensors(weights);
+        console.log("-------- MODEL --------");
+        console.log(model);
+      }
+      if (!tokenizer) {
+        tokenizer = await tokenizers.getBpe("clip");
+      }
 
-      const tokenizer = await tokenizers.getBpe("clip");
+      console.log("-------- TOKENIZER --------");
       console.log(tokenizer.encode("hello world"));
 
       const tokens = np.array(tokenizer.encode("hello world"), {
         dtype: np.uint32,
       });
-      const encoded = runMobileCLIPTextEncoder(model.text, tokens);
+      const encoded = runEncoder(tree.ref(model.text), tokens);
       console.log("-------- ENCODED --------");
-      console.log(encoded.js());
+      console.log(await encoded.jsAsync());
     } catch (error) {
       console.error("Error in main:", error);
     }

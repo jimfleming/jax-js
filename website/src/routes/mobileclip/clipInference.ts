@@ -3,11 +3,11 @@ import { safetensors, WeightMapper } from "@jax-js/loaders";
 
 // MobileCLIP2 model weights interfaces and forward pass.
 
-export interface MobileCLIP {
+export type MobileCLIP = {
   text: MobileCLIPTextEncoder;
   visual: any; // TODO
   logitScale: np.Array;
-}
+};
 
 const weightMapper = new WeightMapper({
   exact: {
@@ -46,13 +46,13 @@ export function fromSafetensors(file: safetensors.File): MobileCLIP {
   return safetensors.toNested(hydrated);
 }
 
-export interface MobileCLIPTextEncoder {
+export type MobileCLIPTextEncoder = {
   tokenEmbedding: np.Array;
   positionalEmbedding: np.Array;
   transformer: MobileCLIPTextBlock[];
   lnFinal: LayerNorm;
   textProjection: np.Array;
-}
+};
 
 export function runMobileCLIPTextEncoder(
   {
@@ -79,13 +79,13 @@ export function runMobileCLIPTextEncoder(
   return np.matmul(finalFeatures, textProjection); // [B, D_out]
 }
 
-export interface MobileCLIPTextBlock {
+export type MobileCLIPTextBlock = {
   ln1: LayerNorm;
   attn: MultiHeadAttention;
   ln2: LayerNorm;
   mlpUp: Linear;
   mlpDown: Linear;
-}
+};
 
 export function runMobileCLIPTextBlock(
   { ln1, attn, ln2, mlpUp, mlpDown }: MobileCLIPTextBlock,
@@ -106,10 +106,10 @@ export function runMobileCLIPTextBlock(
   return x;
 }
 
-export interface MultiHeadAttention {
+export type MultiHeadAttention = {
   qkvProj: Linear;
   outProj: Linear;
-}
+};
 
 export function runMultiHeadAttention(
   { qkvProj, outProj }: MultiHeadAttention,
@@ -156,19 +156,19 @@ export function runMultiHeadAttention(
   return runLinear(outProj, output);
 }
 
-export interface Linear {
+export type Linear = {
   weight: np.Array; // [Out, In]
   bias: np.Array; // [Out]
-}
+};
 
 export function runLinear({ weight, bias }: Linear, x: np.Array): np.Array {
   return np.dot(x, weight.transpose()).add(bias);
 }
 
-export interface LayerNorm {
+export type LayerNorm = {
   weight: np.Array;
   bias: np.Array;
-}
+};
 
 export function runLayerNorm(
   { weight, bias }: LayerNorm,
