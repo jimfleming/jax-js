@@ -702,6 +702,13 @@ export function tan(x: ArrayLike): Array {
   return sin(x.ref).div(cos(x));
 }
 
+/** Element-wise subtraction, with broadcasting. */
+export function subtract(x: ArrayLike, y: ArrayLike): Array {
+  x = fudgeArray(x);
+  y = fudgeArray(y);
+  return x.sub(y);
+}
+
 /** Calculates the floating-point division of x by y element-wise. */
 export function trueDivide(x: ArrayLike, y: ArrayLike): Array {
   x = fudgeArray(x);
