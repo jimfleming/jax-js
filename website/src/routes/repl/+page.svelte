@@ -386,7 +386,7 @@
               {/if}
             </p>
             <div
-              class="pb-2 px-4 flex flex-col grow overflow-y-auto"
+              class="pb-2 px-4 flex flex-col grow overflow-y-auto text-[13px]"
               style:scrollbar-width="thin"
             >
               {#each consoleLines as line, i (i)}
@@ -409,11 +409,11 @@
                   {:else if line.level === "error"}
                     <X size={18} class="text-red-500" />
                   {/if}
-                  <p class="text-sm font-mono whitespace-pre-wrap">
+                  <p class="font-mono whitespace-pre-wrap">
                     {line.data.join(" ")}
                   </p>
                   <p
-                    class="hidden md:block ml-auto shrink-0 text-sm font-mono text-gray-400 select-none"
+                    class="hidden md:block ml-auto shrink-0 font-mono text-gray-400 select-none"
                   >
                     {new Date(line.time).toLocaleTimeString()}
                   </p>

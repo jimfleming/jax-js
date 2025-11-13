@@ -50,7 +50,7 @@
     monaco = (await import("$lib/monaco")).default;
 
     editor = monaco.editor.create(containerEl, {
-      fontSize: 14,
+      fontSize: 13,
       automaticLayout: true,
     });
     editor.addAction({
