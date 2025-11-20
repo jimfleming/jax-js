@@ -8,6 +8,8 @@ import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
 
+import replBuiltinsSrc from "../routes/repl/repl-builtins.d.ts?raw";
+
 self.MonacoEnvironment = {
   getWorker: function (_: string, label: string) {
     switch (label) {
@@ -51,6 +53,12 @@ monaco.languages.typescript.typescriptDefaults.addExtraLib(
 monaco.languages.typescript.typescriptDefaults.addExtraLib(
   loadersTypesSrc,
   "file:///node_modules/@jax-js/loaders/index.d.ts",
+);
+
+// Global declarations for _BUILTINS available in the REPL.
+monaco.languages.typescript.typescriptDefaults.addExtraLib(
+  replBuiltinsSrc,
+  "file:///repl-builtins.d.ts",
 );
 
 export default monaco;
