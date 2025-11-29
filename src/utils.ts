@@ -244,7 +244,7 @@ export interface FpHashable {
   hash(state: FpHash): void;
 }
 
-const _stagingbuf = new DataView(new ArrayBuffer(4));
+const _stagingbuf = new DataView(new ArrayBuffer(8));
 
 /**
  * Polynomial hashes modulo p are good at avoiding collisions in expectation.
