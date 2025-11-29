@@ -80,7 +80,6 @@ pnpm -C website dev
 
 - Finish CLIP inference demo and associated features (depthwise convolution, vmap of gather, etc.)
 - Performance
-  - Add `onnxruntime-web` to matmul and conv2d benchmarks
   - Improve perf of MNIST neural network
     - Optimize conv2d further (maybe blocks -> local dims?)
     - Add fused epilogue to JIT
