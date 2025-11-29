@@ -167,10 +167,12 @@ export class Array extends Tracer {
     this.#backend = backend;
     this.#rc = 1;
 
-    if (source instanceof AluExp && pending !== null) {
+    this.#pendingSet = new Set(pending);
+    if (this.#pendingSet.size === 0) {
+      this.#pendingSet = null;
+    } else if (source instanceof AluExp) {
       throw new Error("internal: AluExp source cannot have pending executes");
     }
-    this.#pendingSet = pending !== null ? new Set(pending) : null;
   }
 
   /** @ignore */
