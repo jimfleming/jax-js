@@ -277,7 +277,10 @@ export class FpHash {
   ): this {
     for (const x of values) {
       if (typeof x === "string") {
-        for (const c of x) this.#update(BigInt(199 + c.charCodeAt(0)));
+        this.#update(BigInt(x.length));
+        for (let i = 0; i < x.length; i++) {
+          this.#update(BigInt(199 + x.charCodeAt(i)));
+        }
       } else if (typeof x === "number") {
         if (Number.isInteger(x)) {
           this.#update(68265653n ^ BigInt(x));
