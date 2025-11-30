@@ -432,12 +432,12 @@ Most operations behave the same way as they do in JAX.
 | `trace`               | 🟠      |                                         |
 | `trapezoid`           | 🟠      |                                         |
 | `transpose`           | 🟢      |                                         |
-| `tri`                 | 🟠      |                                         |
-| `tril`                | 🟠      |                                         |
+| `tri`                 | 🟢      |                                         |
+| `tril`                | 🟢      |                                         |
 | `tril_indices`        | 🟠      |                                         |
 | `tril_indices_from`   | 🟠      |                                         |
 | `trim_zeros`          | 🟠      |                                         |
-| `triu`                | 🟠      |                                         |
+| `triu`                | 🟢      |                                         |
 | `triu_indices`        | 🟠      |                                         |
 | `triu_indices_from`   | 🟠      |                                         |
 | `true_divide`         | 🟢      |                                         |

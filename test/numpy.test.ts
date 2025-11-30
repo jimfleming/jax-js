@@ -143,6 +143,59 @@ suite.each(devices)("device:%s", (device) => {
     });
   });
 
+  suite("jax.numpy.tri()", () => {
+    test("computes lower-triangular matrix", () => {
+      const x = np.tri(3);
+      expect(x.js()).toEqual([
+        [1, 0, 0],
+        [1, 1, 0],
+        [1, 1, 1],
+      ]);
+    });
+
+    test("computes rectangular lower-triangular matrix", () => {
+      const x = np.tri(2, 4, 1);
+      expect(x.js()).toEqual([
+        [1, 1, 0, 0],
+        [1, 1, 1, 0],
+      ]);
+    });
+
+    test("triu works", () => {
+      const x = np.arange(24).reshape([2, 3, 4]);
+      const y = np.triu(x);
+      expect(y.js()).toEqual([
+        [
+          [0, 1, 2, 3],
+          [0, 5, 6, 7],
+          [0, 0, 10, 11],
+        ],
+        [
+          [12, 13, 14, 15],
+          [0, 17, 18, 19],
+          [0, 0, 22, 23],
+        ],
+      ]);
+    });
+
+    test("tril works", () => {
+      const x = np.arange(24).reshape([2, 3, 4]);
+      const y = np.tril(x);
+      expect(y.js()).toEqual([
+        [
+          [0, 0, 0, 0],
+          [4, 5, 0, 0],
+          [8, 9, 10, 0],
+        ],
+        [
+          [12, 0, 0, 0],
+          [16, 17, 0, 0],
+          [20, 21, 22, 0],
+        ],
+      ]);
+    });
+  });
+
   suite("jax.numpy.arange()", () => {
     test("can be called with 1 argument", () => {
       let x = np.arange(5);

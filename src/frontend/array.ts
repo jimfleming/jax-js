@@ -118,7 +118,7 @@ export class PendingExecute {
 }
 
 /** @inline */
-type DTypeAndDevice = { dtype?: DType; device?: Device };
+export type DTypeAndDevice = { dtype?: DType; device?: Device };
 
 /**
  * A multidimensional numeric array with data stored on CPU or GPU.
