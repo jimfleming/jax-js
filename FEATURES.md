@@ -57,7 +57,6 @@ In the tables below, we use a color legend to refer to functions in JAX:
 | `closure_convert`    | 🔴      | core engine feature                             |
 | `checkpoint`         | 🔴      | core engine feature                             |
 | `vmap`               | 🟡      | some ops do not have vmap support yet           |
-| `numpy.vectorize`    | 🟠      |                                                 |
 | `shard_map`          | ⚪️      | device sharding                                 |
 | `smap`               | ⚪️      | device sharding                                 |
 | `pmap`               | ⚪️      | device sharding                                 |
@@ -85,17 +84,25 @@ simplify the core Array prototype, since there's a bit of cruft there with esote
 
 **Data types:** We only support data types that can be efficiently worked with on the web.
 [Type promotion](https://docs.jax.dev/en/latest/type_promotion.html) behaves similarly as in JAX,
-with "weak types" encoded in the compiler IR.
+with "weak types" baked into the compiler IR.
+[Complex numbers](https://docs.jax.dev/en/latest/_autosummary/jax.lax.complex.html) are not
+supported.
 
-| Data type     | CPU (debug) | Wasm | WebGPU |
-| ------------- | ----------- | ---- | ------ |
-| `np.bool_`    | 🟢          | 🟢   | 🟢     |
-| `np.int32`    | 🟢          | 🟢   | 🟢     |
-| `np.uint32`   | 🟢          | 🟢   | 🟢     |
-| `np.bfloat16` | 🔴          | 🔴   | 🔴     |
-| `np.float16`  | 🟢          | 🔴   | 🟢     |
-| `np.float32`  | 🟢          | 🟢   | 🟢     |
-| `np.float64`  | 🟠          | 🟠   | 🔴     |
+| Data type     | CPU (debug) | Wasm | WebGPU | Notes                    |
+| ------------- | ----------- | ---- | ------ | ------------------------ |
+| `np.bool_`    | 🟢          | 🟢   | 🟢     |                          |
+| `np.int8`     | 🟠          | 🟠   | 🟠     | requires emulation       |
+| `np.uint8`    | 🟠          | 🟠   | 🟠     | requires emulation       |
+| `np.int16`    | 🟠          | 🟠   | 🟠     | requires emulation       |
+| `np.uint16`   | 🟠          | 🟠   | 🟠     | requires emulation       |
+| `np.int32`    | 🟢          | 🟢   | 🟢     |                          |
+| `np.uint32`   | 🟢          | 🟢   | 🟢     |                          |
+| `np.int64`    | 🔴          | 🔴   | 🔴     | requires bigint refactor |
+| `np.uint64`   | 🔴          | 🔴   | 🔴     | requires bigint refactor |
+| `np.bfloat16` | 🔴          | 🔴   | 🔴     | lacks support            |
+| `np.float16`  | 🟢          | 🔴   | 🟢     | no wasm support          |
+| `np.float32`  | 🟢          | 🟢   | 🟢     |                          |
+| `np.float64`  | 🟠          | 🟠   | 🔴     | no webgpu support        |
 
 Most operations behave the same way as they do in JAX.
 [API docs](https://www.ekzhang.com/jax-js/docs/modules/_jax-js_jax.numpy.html).
