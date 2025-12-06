@@ -133,9 +133,9 @@
         </ul>
 
         <p class="mb-6">
-          jax-js is likely the most portable ML framework, since it runs
+          jax-js is likely the most portable GPU ML framework, since it runs
           anywhere a browser can run. It's also simple but optimized, including
-          a lightweight compiler and GPU kernel scheduler inspired by <a
+          a lightweight compiler and kernel scheduler inspired by <a
             href="https://github.com/tinygrad/tinygrad"
             target="_blank"
             class="underline hover:text-primary">tinygrad</a
@@ -160,23 +160,22 @@
 
   <!-- Live Editor section -->
   <section class="px-6 py-12 max-w-screen-xl mx-auto">
-    <h2 class="text-xl mb-2">
-      Try it out!
-      <span class="text-red-500">(under construction)</span>
-    </h2>
+    <h2 class="text-xl mb-2">Try it out!</h2>
 
     <p class="mb-4 text-sm text-gray-600">
       This is a live editor, the code is running in your browser.
     </p>
 
-    <div class="h-80">
+    <div class="h-100">
       <EmbeddedRepl
-        initialText={String.raw`import { numpy as np } from "@jax-js/jax";
+        initialText={String.raw`import { grad, numpy as np } from "@jax-js/jax";
 
-const x = np.linspace(-10, 10, 200).reshape([10, 20]);
-const y = np.exp(x).sub(1);
+const f = (x: np.Array) => np.sqrt(x.ref.mul(x).sum());
+const df = grad(f);
 
-console.log(y.js());
+const x = np.array([1, 2, 3, 4]);
+console.log(f(x.ref).js());
+console.log(df(x).js());
 `}
       />
     </div>

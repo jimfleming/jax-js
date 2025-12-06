@@ -7,8 +7,6 @@
   import type { Device, numpy as np } from "@jax-js/jax";
   import { SplitPane } from "@rich_harris/svelte-split-pane";
   import type { Plugin } from "@rollup/browser";
-  import { gunzipSync, gzipSync } from "fflate";
-  import { Base64 } from "js-base64";
   import {
     AlertTriangleIcon,
     ArrowRightIcon,
@@ -23,6 +21,7 @@
   } from "lucide-svelte";
 
   import ReplEditor from "$lib/repl/ReplEditor.svelte";
+  import { decodeContent, encodeContent } from "$lib/repl/encode";
 
   const src: Record<string, string> = import.meta.glob("./*.ts", {
     eager: true,
@@ -56,8 +55,7 @@
 
       const contentZipB64 = url.searchParams.get("content");
       if (contentZipB64) {
-        const contentZip = Base64.toUint8Array(contentZipB64); // Supports URL-safe base64
-        selection.content = new TextDecoder().decode(gunzipSync(contentZip));
+        selection.content = decodeContent(contentZipB64);
       }
     }
 
@@ -110,13 +108,8 @@
   async function handleShare() {
     const code = replEditor.getText();
 
-    // Encode the code as gzipped base64
-    const encoded = new TextEncoder().encode(code);
-    const compressed = gzipSync(encoded, { mtime: 0 });
-    const base64Content = Base64.fromUint8Array(compressed, true); // URL-safe base64
-
     const url = new URL(page.url.origin + page.url.pathname);
-    url.searchParams.set("content", base64Content);
+    url.searchParams.set("content", encodeContent(code));
 
     try {
       goto(url, { replaceState: true });

@@ -5,11 +5,13 @@
   let {
     initialText,
     editorOptions = {},
+    onchange,
     onformat,
     onrun,
   }: {
     initialText: string;
     editorOptions?: Monaco.editor.IStandaloneEditorConstructionOptions;
+    onchange?: () => void;
     onformat?: () => void;
     onrun?: () => void;
   } = $props();
@@ -57,6 +59,11 @@
       renderLineHighlight: "none",
       ...editorOptions,
     });
+    if (onchange) {
+      editor.onDidChangeModelContent(() => {
+        onchange();
+      });
+    }
     editor.addAction({
       id: "format",
       label: "Format with Prettier",
