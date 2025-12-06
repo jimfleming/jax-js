@@ -57,7 +57,7 @@
           jax-js is a machine learning library and compiler for the web
         </h1>
         <p class="text-lg text-gray-700 leading-snug mb-8 max-w-2xl">
-          High-performance WebAssembly and WebGPU kernels in JavaScript. Run AI
+          High-performance WebGPU and WebAssembly kernels in JavaScript. Run AI
           training and inference, image algorithms, simulations, and numerical
           code on arrays, all JIT compiled in your browser.
         </p>
@@ -114,12 +114,12 @@
         </h2>
 
         <p class="mb-6">
-          jax-js is a end-to-end ML library inspired by JAX, written in pure
+          jax-js is a end-to-end ML library inspired by JAX, but in pure
           JavaScript:
         </p>
 
         <ul
-          class="space-y-2 pl-4 mb-8 list-disc list-inside marker:text-gray-400"
+          class="space-y-2 pl-4 mb-6 list-disc list-inside marker:text-gray-400"
         >
           <li>Runs completely client-side (Chrome, Firefox, iOS, Android).</li>
           <li>
@@ -135,18 +135,8 @@
         <p class="mb-6">
           jax-js is likely the most portable GPU ML framework, since it runs
           anywhere a browser can run. It's also simple but optimized, including
-          a lightweight compiler and kernel scheduler inspired by <a
-            href="https://github.com/tinygrad/tinygrad"
-            target="_blank"
-            class="underline hover:text-primary">tinygrad</a
-          >.
-        </p>
-
-        <p class="mb-6">
-          Having a web-based compiler allows us to build a fully featured ML
-          library while keeping good performance. We take a different approach
-          compared to most runtimes by translating array programs into
-          WebAssembly and WebGPU kernels.
+          a lightweight compiler that translates your high-level operations into
+          WebGPU and WebAssembly kernels.
         </p>
 
         <p>

@@ -13,6 +13,10 @@ npm i @jax-js/jax
 Under the hood, it translates array operations into a compiler representation, then synthesizes
 kernels in WebAssembly and WebGPU.
 
+The library is written from scratch, with zero external dependencies. It maintains close API
+compatibility with NumPy/JAX. Since everything runs client-side, jax-js is likely the most portable
+GPU ML framework, since it runs anywhere a browser can run.
+
 ## Quickstart
 
 You can use `jax-js` as an array API, just like NumPy.
