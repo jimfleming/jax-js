@@ -641,7 +641,6 @@ export class Array extends Tracer {
     this.#check();
     if (!(this.#source instanceof AluExp))
       throw new Error("internal: #dataInline called on non-AluExp source");
-    // TODO: Consider switching to Wasm if CPU is slow?
     const ar = this.#newArrayFrom({ backend: getBackend("cpu") });
     this.dispose();
     return ar.dataSync();
@@ -1150,19 +1149,11 @@ export function fullInternal(
 }
 
 export function zerosLike(val: TracerValue, dtype?: DType): Array {
-  const aval = getAval(val);
-  if (val instanceof Tracer) val.dispose();
-  // TODO: Use correct device.
-  const sa = new ShapedArray(aval.shape, dtype ?? aval.dtype, aval.weakType);
-  return fullInternal(sa, 0);
+  return fullLike(val, 0, dtype);
 }
 
 export function onesLike(val: TracerValue, dtype?: DType): Array {
-  const aval = getAval(val);
-  if (val instanceof Tracer) val.dispose();
-  // TODO: Use correct device.
-  const sa = new ShapedArray(aval.shape, dtype ?? aval.dtype, aval.weakType);
-  return fullInternal(sa, 1);
+  return fullLike(val, 1, dtype);
 }
 
 export function fullLike(
