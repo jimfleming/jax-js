@@ -32,31 +32,31 @@ self.MonacoEnvironment = {
   },
 };
 
-monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-  target: monaco.languages.typescript.ScriptTarget.ESNext,
+monaco.typescript.typescriptDefaults.setCompilerOptions({
+  target: monaco.typescript.ScriptTarget.ESNext,
   allowNonTsExtensions: true,
-  moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-  module: monaco.languages.typescript.ModuleKind.ESNext,
+  moduleResolution: monaco.typescript.ModuleResolutionKind.NodeJs,
+  module: monaco.typescript.ModuleKind.ESNext,
   typeRoots: ["node_modules/@types"],
   allowSyntheticDefaultImports: true,
   esModuleInterop: true,
 });
 
-monaco.languages.typescript.typescriptDefaults.addExtraLib(
+monaco.typescript.typescriptDefaults.addExtraLib(
   jaxTypesSrc,
   "file:///node_modules/@jax-js/jax/index.d.ts",
 );
-monaco.languages.typescript.typescriptDefaults.addExtraLib(
+monaco.typescript.typescriptDefaults.addExtraLib(
   optaxTypesSrc,
   "file:///node_modules/@jax-js/optax/index.d.ts",
 );
-monaco.languages.typescript.typescriptDefaults.addExtraLib(
+monaco.typescript.typescriptDefaults.addExtraLib(
   loadersTypesSrc,
   "file:///node_modules/@jax-js/loaders/index.d.ts",
 );
 
 // Global declarations for _BUILTINS available in the REPL.
-monaco.languages.typescript.typescriptDefaults.addExtraLib(
+monaco.typescript.typescriptDefaults.addExtraLib(
   replBuiltinsSrc,
   "file:///repl-builtins.d.ts",
 );

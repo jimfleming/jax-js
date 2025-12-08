@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import { includeIgnoreFile } from "@eslint/compat";
 import js from "@eslint/js";
+import { defineConfig } from "eslint/config";
 import prettier from "eslint-config-prettier";
 import * as eslintImport from "eslint-plugin-import";
 import svelte from "eslint-plugin-svelte";
@@ -10,13 +11,13 @@ import ts from "typescript-eslint";
 
 const gitignorePath = fileURLToPath(new URL("./.gitignore", import.meta.url));
 
-export default ts.config(
+export default defineConfig(
   includeIgnoreFile(gitignorePath),
   js.configs.recommended,
-  ...ts.configs.recommended,
-  ...svelte.configs["flat/recommended"],
+  ts.configs.recommended,
+  svelte.configs["flat/recommended"],
   prettier,
-  ...svelte.configs["flat/prettier"],
+  svelte.configs["flat/prettier"],
   {
     languageOptions: {
       globals: {
@@ -29,7 +30,7 @@ export default ts.config(
     },
   },
   {
-    files: ["**/*.svelte"],
+    files: ["**/*.svelte", "**/*.svelte.ts"],
     languageOptions: {
       parserOptions: {
         parser: ts.parser,
@@ -76,6 +77,11 @@ export default ts.config(
           memberSyntaxSortOrder: ["none", "all", "multiple", "single"],
         },
       ],
+      "svelte/no-dom-manipulating": "off",
+      "svelte/no-navigation-without-resolve": "off",
+      "svelte/prefer-svelte-reactivity": "off",
+      "svelte/prefer-writable-derived": "off",
+      "svelte/require-each-key": "off",
     },
   },
 );

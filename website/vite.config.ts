@@ -13,4 +13,8 @@ export default defineConfig({
     // https://github.com/vitejs/vite/issues/14609
     exclude: ["@rollup/browser", "onnxruntime-web"],
   },
+  build: {
+    // Increase chunk size warning limit for ML libraries.
+    chunkSizeWarningLimit: 4000,
+  },
 });
