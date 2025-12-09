@@ -52,6 +52,7 @@
     "es-toolkit": "^1.39.8",
     "fflate": "^0.8.2",
     "js-base64": "^3.7.8",
+    "merge-descriptors": "^2.0.0",
     "monaco-editor": "^0.55.1",
     "onnx-proto": "^8.0.1",
     "onnxruntime-web": "^1.23.2",

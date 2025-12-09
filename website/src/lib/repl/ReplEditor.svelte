@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mergeDescriptors from "merge-descriptors";
   import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api.js";
   import { onDestroy, onMount } from "svelte";
 
@@ -53,13 +54,18 @@
   onMount(async () => {
     monaco = (await import("$lib/monaco")).default;
 
-    editor = monaco.editor.create(containerEl, {
-      fontSize: 13,
-      automaticLayout: true,
-      renderLineHighlight: "none",
-      minimap: { enabled: false },
-      ...editorOptions,
-    });
+    editor = monaco.editor.create(
+      containerEl,
+      mergeDescriptors(
+        {
+          fontSize: 13,
+          automaticLayout: true,
+          renderLineHighlight: "none",
+          minimap: { enabled: false },
+        },
+        editorOptions,
+      ),
+    );
     if (onchange) {
       editor.onDidChangeModelContent(() => {
         onchange();

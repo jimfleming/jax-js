@@ -99,11 +99,13 @@
             {initialText}
             editorOptions={{
               lineNumbersMinChars: 4,
-              padding: {
-                top: 8,
-                bottom: 8,
+              padding: { top: 8, bottom: 8 },
+              scrollbar: {
+                alwaysConsumeMouseWheel: false,
+                horizontalScrollbarSize: 10,
+                useShadows: false,
+                verticalScrollbarSize: 10,
               },
-              scrollbar: { alwaysConsumeMouseWheel: false, useShadows: false },
               scrollBeyondLastLine: false,
             }}
             onchange={() => {
