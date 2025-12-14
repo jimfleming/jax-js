@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 import {
+  wasm_atan,
   wasm_cos,
   wasm_exp,
   wasm_log,
@@ -10,10 +11,10 @@ import {
 import { CodeGenerator } from "./wasmblr";
 
 function relativeError(wasmResult: number, jsResult: number): number {
-  return Math.abs(wasmResult - jsResult) / (Math.abs(jsResult) + 1);
+  return Math.abs(wasmResult - jsResult) / Math.max(Math.abs(jsResult), 1);
 }
 
-test("wasm_exp has relative error < 2e-5", async () => {
+test("wasm_exp has relative error < 2e-7", async () => {
   const cg = new CodeGenerator();
 
   const expFunc = wasm_exp(cg);
@@ -23,13 +24,16 @@ test("wasm_exp has relative error < 2e-5", async () => {
   const { instance } = await WebAssembly.instantiate(wasmBytes);
   const { exp } = instance.exports as { exp(x: number): number };
 
-  const testValues = [-5, -2, -1, -0.5, 0, 0.5, 1, 2, 3, 5, 10];
+  const testValues = [
+    -5, -2, -1, -0.5, 0, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.9, 0.99,
+    1, 2, 3, 5, 10,
+  ];
   for (const x of testValues) {
-    expect(relativeError(exp(x), Math.exp(x))).toBeLessThan(2e-5);
+    expect(relativeError(exp(x), Math.exp(x))).toBeLessThan(2e-7);
   }
 });
 
-test("wasm_log has relative error < 2e-5", async () => {
+test("wasm_log has relative error < 5e-7", async () => {
   const cg = new CodeGenerator();
 
   const logFunc = wasm_log(cg);
@@ -41,7 +45,7 @@ test("wasm_log has relative error < 2e-5", async () => {
 
   const testValues = [0.01, 0.1, 0.5, 1, 1.5, 2, Math.E, 5, 10, 100];
   for (const x of testValues) {
-    expect(relativeError(log(x), Math.log(x))).toBeLessThan(2e-5);
+    expect(relativeError(log(x), Math.log(x))).toBeLessThan(5e-7);
   }
 
   // Test edge case: log(x <= 0) should return NaN
@@ -49,7 +53,7 @@ test("wasm_log has relative error < 2e-5", async () => {
   expect(log(-1)).toBeNaN();
 });
 
-test("wasm_sin has absolute error < 1e-5", async () => {
+test("wasm_sin has absolute error < 5e-7", async () => {
   const cg = new CodeGenerator();
 
   const sinFunc = wasm_sin(cg);
@@ -80,11 +84,11 @@ test("wasm_sin has absolute error < 1e-5", async () => {
   ];
 
   for (const x of testValues) {
-    expect(Math.abs(sin(x) - Math.sin(x))).toBeLessThan(1e-5);
+    expect(Math.abs(sin(x) - Math.sin(x))).toBeLessThan(5e-7);
   }
 });
 
-test("wasm_cos has absolute error < 1e-5", async () => {
+test("wasm_cos has absolute error < 5e-7", async () => {
   const cg = new CodeGenerator();
 
   const cosFunc = wasm_cos(cg);
@@ -115,7 +119,28 @@ test("wasm_cos has absolute error < 1e-5", async () => {
   ];
 
   for (const x of testValues) {
-    expect(Math.abs(cos(x) - Math.cos(x))).toBeLessThan(1e-5);
+    expect(Math.abs(cos(x) - Math.cos(x))).toBeLessThan(5e-7);
+  }
+});
+
+test("wasm_atan has relative error < 5e-7", async () => {
+  const cg = new CodeGenerator();
+
+  const atanFunc = wasm_atan(cg);
+  cg.export(atanFunc, "atan");
+
+  const wasmBytes = cg.finish();
+  const { instance } = await WebAssembly.instantiate(wasmBytes);
+  const { atan } = instance.exports as { atan(x: number): number };
+
+  // Test a range of values including critical points
+  const testValues = [
+    -1000, -100, -50, -10, -5, -2, -1, -0.5, -0.1, -0.01, 0, 0.01, 0.1, 0.5, 1,
+    2, 5, 10, 50, 100, 1000,
+  ];
+
+  for (const x of testValues) {
+    expect(relativeError(atan(x), Math.atan(x))).toBeLessThan(5e-7);
   }
 });
 

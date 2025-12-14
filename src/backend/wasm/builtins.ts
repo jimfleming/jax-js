@@ -69,8 +69,8 @@ export function wasm_exp(cg: CodeGenerator): number {
     cg.f32.sub();
     cg.local.set(r);
 
-    // P(r) ≈ 1 + r + r^2/2 + r^3/6 + r^4/24 + r^5/120
-    _poly(cg, r, [1, 1, 1 / 2, 1 / 6, 1 / 24, 1 / 120]);
+    // Taylor series: exp(r) = sum[k] r^k / k!
+    _poly(cg, r, [1, 1, 1 / 2, 1 / 6, 1 / 24, 1 / 120, 1 / 720]);
     cg.local.set(p);
 
     // scale = 2^k via exponent bits: ((k + 127) << 23)
@@ -176,7 +176,7 @@ export function wasm_log(cg: CodeGenerator): number {
  * Method: reduce to y in [-π, π], then quadrant via q = round(y/(π/2))
  *         z = y - q*(π/2); use one of two polynomials on z:
  *         sin(z) ≈ z + z^3*(-1/6) + z^5*(1/120) + z^7*(-1/5040)
- *         cos(z) ≈ 1 + z^2*(-1/2) + z^4*(1/24) + z^6*(-1/720)
+ *         cos(z) ≈ 1 + z^2*(-1/2) + z^4*(1/24) + z^6*(-1/720) + z^8*(1/40320)
  */
 function _sincos(cg: CodeGenerator): { q: number; sz: number; cz: number } {
   const y = cg.local.declare(cg.f32);
@@ -218,14 +218,14 @@ function _sincos(cg: CodeGenerator): { q: number; sz: number; cz: number } {
   cg.f32.mul();
   cg.local.set(z2);
 
-  // sin poly: z * (1 + z^2 * (-1/6 + z^2 * (1/120 + z^2 * (-1/5040))))
+  // sin poly
   _poly(cg, z2, [1, -1 / 6, 1 / 120, -1 / 5040]);
   cg.local.get(z);
   cg.f32.mul();
   cg.local.set(sz);
 
-  // cos poly: 1 + z^2 * (-1/2 + z^2 * (1/24 + z^2 * (-1/720)))
-  _poly(cg, z2, [1, -1 / 2, 1 / 24, -1 / 720]);
+  // cos poly
+  _poly(cg, z2, [1, -1 / 2, 1 / 24, -1 / 720, 1 / 40320]);
   cg.local.set(cz);
 
   return { q, sz, cz };
