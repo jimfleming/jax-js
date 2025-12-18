@@ -88,7 +88,13 @@ async function dickensGreatExpectations(): Promise<Book> {
     "https://huggingface.co/datasets/ekzhang/jax-js-examples/raw/main/pg1400.txt";
 
   const dataBytes = await cachedFetch(url);
-  const content = new TextDecoder().decode(dataBytes).replace(/\r/g, "");
+  let content = new TextDecoder().decode(dataBytes).replace(/\r/g, "");
+
+  // Strip Project Gutenberg license footer
+  const endMarker = content.indexOf("*** END OF THE PROJECT GUTENBERG");
+  if (endMarker !== -1) {
+    content = content.slice(0, endMarker);
+  }
 
   // Split by chapter headings (Chapter I., Chapter II., etc.)
   const chapterRegex =
@@ -125,7 +131,13 @@ async function wildeDorianGray(): Promise<Book> {
     "https://huggingface.co/datasets/ekzhang/jax-js-examples/raw/main/pg4078.txt";
 
   const dataBytes = await cachedFetch(url);
-  const content = new TextDecoder().decode(dataBytes).replace(/\r/g, "");
+  let content = new TextDecoder().decode(dataBytes).replace(/\r/g, "");
+
+  // Strip Project Gutenberg license footer
+  const endMarker = content.indexOf("*** END OF THE PROJECT GUTENBERG");
+  if (endMarker !== -1) {
+    content = content.slice(0, endMarker);
+  }
 
   // Split by chapter headings (CHAPTER I, CHAPTER II, etc.)
   const chapterRegex = /\nCHAPTER ([IVXLC]+)\n/g;
@@ -161,7 +173,13 @@ async function fitzgeraldGreatGatsby(): Promise<Book> {
     "https://huggingface.co/datasets/ekzhang/jax-js-examples/raw/main/pg64317.txt";
 
   const dataBytes = await cachedFetch(url);
-  const content = new TextDecoder().decode(dataBytes).replace(/\r/g, "");
+  let content = new TextDecoder().decode(dataBytes).replace(/\r/g, "");
+
+  // Strip Project Gutenberg license footer
+  const endMarker = content.indexOf("*** END OF THE PROJECT GUTENBERG");
+  if (endMarker !== -1) {
+    content = content.slice(0, endMarker);
+  }
 
   // Split by chapter headings (I, II, III, etc. centered with spaces)
   const chapterRegex = /\n +([IVXLC]+)\s*\n/g;
