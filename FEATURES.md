@@ -238,7 +238,7 @@ Most operations behave the same way as they do in JAX.
 | `fmax`                | 🟠      | use `maximum`                           |
 | `fmin`                | 🟠      | use `minimum`                           |
 | `fmod`                | 🟢      |                                         |
-| `frexp`               | 🟠      |                                         |
+| `frexp`               | 🟢      |                                         |
 | `frombuffer`          | 🟠      |                                         |
 | `fromfile`            | ⚪️      | Python-specific                         |
 | `fromfunction`        | 🟠      |                                         |
@@ -294,7 +294,7 @@ Most operations behave the same way as they do in JAX.
 | `kaiser`              | 🔴      | transcendental                          |
 | `kron`                | 🟠      |                                         |
 | `lcm`                 | 🔴      |                                         |
-| `ldexp`               | 🟠      |                                         |
+| `ldexp`               | 🟢      |                                         |
 | `left_shift`          | 🔴      |                                         |
 | `less`                | 🟢      |                                         |
 | `less_equal`          | 🟢      |                                         |
@@ -369,13 +369,13 @@ Most operations behave the same way as they do in JAX.
 | `polymul`             | 🟠      |                                         |
 | `polysub`             | 🟠      |                                         |
 | `polyval`             | 🟠      |                                         |
-| `positive`            | 🟠      |                                         |
+| `positive`            | 🟢      |                                         |
 | `pow`                 | 🟢      |                                         |
 | `power`               | 🟢      |                                         |
 | `printoptions`        | ⚪️      | Python-specific                         |
 | `prod`                | 🟢      |                                         |
 | `promote_types`       | 🟢      |                                         |
-| `ptp`                 | 🟠      |                                         |
+| `ptp`                 | 🟢      |                                         |
 | `put`                 | 🟠      |                                         |
 | `put_along_axis`      | 🟠      |                                         |
 | `quantile`            | 🔴      | sorting                                 |
@@ -419,7 +419,7 @@ Most operations behave the same way as they do in JAX.
 | `split`               | 🟠      | `Array.slice` is supported              |
 | `sqrt`                | 🟢      |                                         |
 | `square`              | 🟢      |                                         |
-| `squeeze`             | 🟠      |                                         |
+| `squeeze`             | 🟢      |                                         |
 | `stack`               | 🟢      |                                         |
 | `std`                 | 🟢      |                                         |
 | `subtract`            | 🟢      |                                         |

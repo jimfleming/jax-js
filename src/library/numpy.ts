@@ -263,6 +263,16 @@ export function max(
   return core.reduce(a, AluOp.Max, axis, opts) as Array;
 }
 
+/** Return the peak-to-peak range along a given axis (`max - min`). */
+export function ptp(
+  a: ArrayLike,
+  axis: core.Axis = null,
+  opts?: core.ReduceOpts,
+): Array {
+  a = fudgeArray(a);
+  return max(a.ref, axis, opts).sub(min(a, axis, opts));
+}
+
 /** Compute the average of the array elements along the specified axis. */
 export function mean(
   a: ArrayLike,
@@ -510,6 +520,22 @@ export const permuteDims = transpose;
 /** Return a 1-D flattened array containing the elements of the input. */
 export function ravel(a: ArrayLike): Array {
   return fudgeArray(a).ravel();
+}
+
+/** Remove one or more length-1 axes from an array. */
+export function squeeze(a: ArrayLike, axis: core.Axis = null): Array {
+  const as = shape(a);
+  if (axis === null) {
+    axis = range(as.length).filter((i) => as[i] === 1);
+  } else if (typeof axis === "number") {
+    axis = [axis];
+  }
+  axis = axis.map((a) => checkAxis(a, as.length));
+  for (const a of axis) {
+    if (as[a] !== 1) throw new Error("Cannot squeeze axis with size != 1");
+  }
+  const newShape = as.filter((_, i) => !axis.includes(i));
+  return reshape(a, newShape);
 }
 
 /**
@@ -1108,6 +1134,9 @@ export function sign(x: ArrayLike): Array {
   return where(notEqual(x.ref, 0), where(less(x.ref, 0), -1, 1), 0);
 }
 
+/** @function Return element-wise positive values of the input (no-op). */
+export const positive = fudgeArray;
+
 /**
  * Return the Hamming window of size M, a taper with a weighted cosine bell.
  *
@@ -1245,6 +1274,34 @@ export const divide = trueDivide;
 /** Round input to the nearest integer towards zero. */
 export function trunc(x: ArrayLike): Array {
   return core.idiv(x, 1) as Array; // Integer division truncates the decimal part.
+}
+
+/**
+ * Compute `x1 * 2 ** x2` as a standard multiplication and exponentiation.
+ *
+ * This is the inverse of `frexp()`.
+ */
+export function ldexp(x1: ArrayLike, x2: ArrayLike): Array {
+  return multiply(x1, exp2(x2));
+}
+
+/**
+ * Decompose floating-point values into mantissa and two's exponent.
+ *
+ * The mantissa is returned in the range `(-1, 1)` with magnitude `>= 0.5` if
+ * `x != 0`, and the exponent is an integer such that
+ * `x = mantissa * 2**exponent`.
+ */
+export function frexp(x: ArrayLike): [Array, Array] {
+  x = fudgeArray(x);
+  const absx = abs(x.ref);
+  const exponent = where(
+    equal(x.ref, 0),
+    0,
+    floor(log2(absx)).add(1).astype(DType.Int32),
+  );
+  const mantissa = divide(x, exp2(exponent.ref.astype(x.dtype)));
+  return [mantissa, exponent];
 }
 
 /** Calculate `2**p` for all p in the input array. */
