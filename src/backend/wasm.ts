@@ -16,7 +16,7 @@ import {
   UnsupportedOpError,
 } from "../backend";
 import { tuneNullopt } from "../tuner";
-import { DEBUG, mapSetUnion, rep } from "../utils";
+import { DEBUG, FpHash, mapSetUnion, rep, runWithCache } from "../utils";
 import { WasmAllocator } from "./wasm/allocator";
 import {
   wasm_asin,
@@ -40,6 +40,8 @@ interface WasmBuffer {
 interface WasmProgram {
   module: WebAssembly.Module;
 }
+
+const moduleCache = new Map<string, WebAssembly.Module>();
 
 /** Backend that compiles into WebAssembly bytecode for immediate execution. */
 export class WasmBackend implements Backend {
@@ -112,8 +114,11 @@ export class WasmBackend implements Backend {
   }
 
   prepareSync(kernel: Kernel): Executable<WasmProgram> {
-    const bytes = codegenWasm(kernel);
-    const module = new WebAssembly.Module(bytes);
+    const kernelHash = FpHash.hash(kernel);
+    const module = runWithCache(moduleCache, kernelHash.toString(), () => {
+      const bytes = codegenWasm(kernel);
+      return new WebAssembly.Module(bytes);
+    });
     return new Executable(kernel, { module });
   }
 
