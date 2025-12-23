@@ -142,9 +142,9 @@
     console.log("Image loaded:", pixelValues.shape);
     console.log(
       "pixel_values min:",
-      np.min(pixelValues.ref).js(),
+      await np.min(pixelValues.ref).jsAsync(),
       "max:",
-      np.max(pixelValues.ref).js(),
+      await np.max(pixelValues.ref).jsAsync(),
     );
 
     console.log("Running forward pass...");
@@ -166,10 +166,10 @@
       console.log("Outputs dtype:", outputs.logits.dtype);
       console.log("logits shape:", outputs.logits.shape);
       console.log("pred_boxes shape:", outputs.pred_boxes.shape);
-      console.log("Logits:", outputs.logits.ref.slice(0).js());
+      console.log("Logits:", await outputs.logits.ref.slice(0).jsAsync());
 
-      probs = nn.softmax(outputs.logits, -1).slice(0).js(); // [100, 92]
-      predBoxes = outputs.pred_boxes.slice(0).js(); // [100, 4]
+      probs = await nn.softmax(outputs.logits, -1).slice(0).jsAsync(); // [100, 92]
+      predBoxes = await outputs.pred_boxes.slice(0).jsAsync(); // [100, 4]
     });
     console.log(`Forward pass took ${seconds.toFixed(3)} s`);
 
