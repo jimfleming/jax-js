@@ -726,6 +726,9 @@ export function allclose(
   const xData = x.dataSync();
   const yData = y.dataSync();
   for (let i = 0; i < xData.length; i++) {
+    if (isNaN(xData[i]) !== isNaN(yData[i])) {
+      return false;
+    }
     if (Math.abs(xData[i] - yData[i]) > atol + rtol * Math.abs(yData[i])) {
       return false;
     }
@@ -1375,7 +1378,18 @@ export const degrees = rad2deg;
  * Computes first array raised to power of second array, element-wise.
  */
 export const power = jit(function power(x1: Array, x2: Array) {
-  return exp(log(x1).mul(x2));
+  // TODO: This is a little bit inefficient since we need to handle negative
+  // numbers to integer exponents, should eventually move it into the backend.
+  const x2i = trunc(x2.ref);
+  // Should be NaN if x1 < 0 and x2 is non-integer.
+  const shouldBeNaN = multiply(x2.ref.notEqual(x2i.ref), x1.ref.less(0));
+  // If x2 is odd integer, result sign matches x1, else it's positive.
+  const resultSign = where(
+    core.mod(x2i, 2).notEqual(0) as Array,
+    sign(x1.ref),
+    1,
+  );
+  return where(shouldBeNaN, nan, exp(log(abs(x1)).mul(x2)).mul(resultSign));
 });
 
 /** @function Alias of `jax.numpy.power()`. */

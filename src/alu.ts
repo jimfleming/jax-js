@@ -653,7 +653,13 @@ export class AluExp implements FpHashable {
         if (op === AluOp.Sub && i === 1 && x === 0) return src[1 - i];
         if (op === AluOp.Mul && x === 1) return src[1 - i];
         if (op === AluOp.Mul && x === 0) return AluExp.const(this.dtype, 0);
-        if (op === AluOp.Idiv && i === 1 && x === 1) return src[1 - i];
+        if (
+          op === AluOp.Idiv &&
+          i === 1 &&
+          x === 1 &&
+          !isFloatDtype(this.dtype)
+        )
+          return src[1 - i];
         if (op === AluOp.Cmpne && src[i].dtype === DType.Bool && x === 0)
           return src[1 - i];
       }

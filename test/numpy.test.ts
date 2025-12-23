@@ -1161,12 +1161,19 @@ suite.each(devices)("device:%s", (device) => {
     test("computes element-wise power", () => {
       const x = np.array([-1, 2, 3, 4]);
       const y = np.power(x, 3);
-      expect(y).toBeAllclose([NaN, 8, 27, 64]);
+      expect(y).toBeAllclose([-1, 8, 27, 64]);
     });
 
     test("multiple different exponents", () => {
       const y = np.power(3, np.array([-2, 0, 0.5, 1, 2]));
       expect(y).toBeAllclose([1 / 9, 1, Math.sqrt(3), 3, 9]);
+    });
+
+    test("works with negative numbers", () => {
+      // const y = np.power(-3, np.array([-2, -1, 0, 1, 2, 3, 4, 5]));
+      // expect(y).toBeAllclose([1 / 9, -1 / 3, 1, -3, 9, -27, 81, -243]);
+      const z = np.power(-3, np.array([0.5, 1.5, 2.5]));
+      expect(z.js()).toEqual([NaN, NaN, NaN]);
     });
   });
 

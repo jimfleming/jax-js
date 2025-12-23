@@ -80,7 +80,7 @@
     // Draw on the visible canvas
     canvasEl.width = size;
     canvasEl.height = size;
-    const ctx = canvasEl.getContext("2d")!;
+    const ctx = canvasEl.getContext("2d", { willReadFrequently: true })!;
     ctx.drawImage(img, sx, sy, cropSize, cropSize, 0, 0, size, size);
 
     const imageData = ctx.getImageData(0, 0, size, size);

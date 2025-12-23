@@ -1,4 +1,4 @@
-import { byteWidth, DType } from "../alu";
+import { byteWidth, DType, isFloatDtype } from "../alu";
 import { PPrint } from "../pprint";
 import { type Pair } from "../shape";
 import {
@@ -310,7 +310,7 @@ export class Jaxpr implements FpHashable {
       } else if (eqn.primitive === Primitive.Idiv) {
         const [a, b] = inputs;
         const c = eqn.outBinders[0];
-        if (atomIsLit(b, 1)) {
+        if (atomIsLit(b, 1) && !isFloatDtype(a.aval.dtype)) {
           context.set(c, a);
         } else {
           newEqns.push(eqn);
