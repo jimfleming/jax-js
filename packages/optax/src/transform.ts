@@ -112,3 +112,150 @@ export function scaleByLearningRate(
   }
   return scale(m * learningRate);
 }
+
+export type AddDecayedWeightsOptions = {
+  weightDecay?: ScalarOrSchedule;
+  mask?: JsTree<np.Array> | null;
+};
+
+/** 
+ * Adds parameter scaled by weight decay (L2 regularization).
+ * 
+ * This transformation scales parameters by the weight decay rate and adds them 
+ * to the gradients, implementing L2 regularization. Commonly used in AdamW.
+ * 
+ * Args:
+ *   weightDecay: A scalar weight decay rate or a schedule function.
+ *   mask: A tree with same structure as the params PyTree. The leaves
+ *     should be arrays with values 0 or 1, where 1 means apply weight decay
+ *     and 0 means skip weight decay for that parameter.
+ */
+export function addDecayedWeights({
+  weightDecay = 0.0,
+  mask = null,
+}: AddDecayedWeightsOptions = {}): GradientTransformation {
+  const isSchedule = typeof weightDecay === "function";
+  
+  return {
+    init(params) {
+      tree.dispose(params);
+      if (isSchedule) {
+        return { count: u32(0) };
+      } else {
+        return [];
+      }
+    },
+    update(updates, state, params) {
+      if (!params) {
+        throw new Error("addDecayedWeights requires params to be provided");
+      }
+      
+      let newState: typeof state;
+      let currentWeightDecay: number;
+      
+      if (isSchedule) {
+        const { count } = state as { count: np.Array };
+        const countInt = count.item();
+        currentWeightDecay = (weightDecay as Schedule)(countInt);
+        newState = { count: u32(countInt + 1) };
+      } else {
+        currentWeightDecay = weightDecay as number;
+        newState = state;
+      }
+      
+      // If weight decay is zero, skip the update
+      if (currentWeightDecay === 0.0) {
+        tree.dispose(params);
+        return [updates, newState];
+      }
+      
+      let decayedParams: JsTree<np.Array>;
+      if (mask) {
+        // Apply mask: multiply params by mask, then by weight decay
+        decayedParams = tree.map(
+          (p: np.Array, m: np.Array) => p.mul(m).mul(currentWeightDecay),
+          tree.ref(params),
+          mask
+        );
+      } else {
+        // Apply weight decay to all parameters
+        decayedParams = tree.map(
+          (p: np.Array) => p.mul(currentWeightDecay),
+          tree.ref(params)
+        );
+      }
+      
+      tree.dispose(params);
+      
+      // Add decayed weights to gradients: g + weight_decay * p
+      updates = tree.map(
+        (g: np.Array, d: np.Array) => g.add(d),
+        updates,
+        decayedParams
+      ) as typeof updates;
+      
+      return [updates, newState];
+    },
+  };
+}
+
+export type TraceOptions = {
+  decay?: number;
+  nesterov?: boolean;
+  accumulatorDtype?: np.DType;
+};
+
+/**
+ * Compute a trace of past updates.
+ * 
+ * This transformation is used to implement momentum in optimization algorithms.
+ * It maintains a moving average (trace) of past gradients.
+ * 
+ * Note: trace and ema have very similar but distinct updates:
+ * - trace = decay * trace + updates
+ * - ema = decay * ema + (1-decay) * updates
+ * 
+ * Args:
+ *   decay: Decay rate for the trace of past updates (momentum coefficient).
+ *   nesterov: Whether to use Nesterov momentum.
+ *   accumulatorDtype: Optional dtype for the accumulator.
+ */
+export function trace({
+  decay = 0.9,
+  nesterov = false,
+  accumulatorDtype,
+}: TraceOptions = {}): GradientTransformation {
+  return {
+    init(params) {
+      const trace = treeZerosLike(params, accumulatorDtype);
+      return { trace };
+    },
+    update(updates, state, params) {
+      tree.dispose(params);
+      let { trace: prevTrace } = state as { trace: JsTree<np.Array> };
+      
+      // Python: new_trace = g + decay * t
+      const newTrace = tree.map(
+        (g: np.Array, t: np.Array) => g.add(t.mul(decay)),
+        tree.ref(updates),
+        prevTrace
+      );
+      
+      let finalUpdates: typeof updates;
+      if (nesterov) {
+        // Nesterov: updates = g + decay * new_trace  
+        finalUpdates = tree.map(
+          (g: np.Array, t: np.Array) => g.add(t.mul(decay)),
+          updates,
+          tree.ref(newTrace)
+        ) as typeof updates;
+      } else {
+        // Standard momentum: updates = new_trace
+        finalUpdates = tree.ref(newTrace) as typeof updates;
+        tree.dispose(updates);
+      }
+      
+      return [finalUpdates, { trace: newTrace }];
+    },
+  };
+}
