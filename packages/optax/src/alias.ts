@@ -14,22 +14,20 @@ import { numpy as np } from "@jax-js/jax";
 export type SgdOptions = {
   momentum?: number | null;
   nesterov?: boolean;
-  accumulatorDtype?: np.DType;
 };
 
-/** Stochastic Gradient descent. */
+/** Stochastic gradient descent. */
 export function sgd(
   learningRate: ScalarOrSchedule,
   opts: SgdOptions = {}
 ): GradientTransformation {
-  const { momentum = null, nesterov = false, accumulatorDtype } = opts;
+  const { momentum = null, nesterov = false } = opts;
 
   let opt: GradientTransformation;
   if (momentum !== null) {
     opt = trace({
       decay: momentum,
       nesterov,
-      accumulatorDtype,
     });
   } else {
     opt = identity();

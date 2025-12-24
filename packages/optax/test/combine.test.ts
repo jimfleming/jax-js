@@ -9,13 +9,13 @@ test("chain function combines transformations", () => {
   // Chain two simple transformations
   const combined = chain(scale(2.0), scale(0.5));
   const state = combined.init(params.ref);
-  
+
   const [newUpdates, _newState] = combined.update(
-    updates.ref, 
-    state, 
+    updates.ref,
+    state,
     params.ref
   );
-  
+
   // 2.0 * 0.5 = 1.0, so updates should be unchanged
   expect(newUpdates).toBeAllclose([0.1, 0.2, 0.3]);
 });
