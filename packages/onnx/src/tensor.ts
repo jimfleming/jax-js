@@ -35,6 +35,13 @@ export class StaticArray {
    * Supports expanding dims of size 1 and prepending new dims at front.
    */
   broadcastTo(newShape: number[]): StaticArray {
+    if (
+      this.shape.length === newShape.length &&
+      this.shape.every((v, i) => v === newShape[i])
+    ) {
+      return this; // No broadcasting needed
+    }
+
     // Pad shape with 1s at the front to match newShape length
     const padded = [
       ...new Array(newShape.length - this.shape.length).fill(1),
