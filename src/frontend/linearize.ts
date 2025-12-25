@@ -4,6 +4,8 @@ import { AluOp, isFloatDtype } from "../alu";
 import {
   dispose as treeDispose,
   flatten as treeFlatten,
+  map as treeMap,
+  ref as treeRef,
   unflatten as treeUnflatten,
 } from "../tree";
 import {
@@ -16,7 +18,7 @@ import {
   toposort,
   unzip2,
 } from "../utils";
-import { array, eye, onesLike, pureArray, zeros } from "./array";
+import { array, eye, onesLike, pureArray, zeros, zerosLike } from "./array";
 import {
   AbstractValue,
   add,
@@ -152,10 +154,25 @@ function linearizeFlat(
   return [primalsOut, fLin, dispose];
 }
 
+/** @inline */
+export type LinearizeOpts = {
+  hasAux?: boolean;
+};
+
 export function linearize(
   f: (...primals: any[]) => any,
-  ...primalsIn: any[]
+  ...args: any[]
 ): [any, OwnedFunction<(...tangents: any[]) => any>] {
+  // Parse args: first element after f may be opts object
+  let primalsIn: any[];
+  let opts: LinearizeOpts | undefined;
+  if (args.length > 0 && isOptsWithHasAux(args[0])) {
+    opts = args[0];
+    primalsIn = args.slice(1);
+  } else {
+    primalsIn = args;
+  }
+
   const [primalsInFlat, inTree] = treeFlatten(primalsIn);
   const [fFlat, outTree] = flattenFun(f, inTree);
   const [primalsOutFlat, fLinFlat, dispose] = linearizeFlat(
@@ -165,7 +182,25 @@ export function linearize(
   if (outTree.value === undefined) {
     throw new Error("outTree was not set in linearize");
   }
-  const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
+  const primalsOutFull = treeUnflatten(outTree.value, primalsOutFlat);
+
+  if (opts?.hasAux) {
+    const [primalsOut, aux] = primalsOutFull as [any, any];
+    const fLin = ((...tangentsIn: any[]) => {
+      const [tangentsInFlat, inTree2] = treeFlatten(tangentsIn);
+      if (!inTree.equals(inTree2)) {
+        throw new TreeMismatchError("linearize", inTree, inTree2);
+      }
+      const tangentsOutFlat = fLinFlat(...tangentsInFlat.map(pureArray));
+      const tangentsOutFull = treeUnflatten(outTree.value!, tangentsOutFlat);
+      const [tangentsOut, auxTangents] = tangentsOutFull as [any, any];
+      treeDispose(auxTangents);
+      return tangentsOut;
+    }) as OwnedFunction<(...tangents: any[]) => any>;
+    fLin.dispose = dispose;
+    return [[primalsOut, aux], fLin];
+  }
+
   const fLin = ((...tangentsIn: any[]) => {
     const [tangentsInFlat, inTree2] = treeFlatten(tangentsIn);
     if (!inTree.equals(inTree2)) {
@@ -175,7 +210,7 @@ export function linearize(
     return treeUnflatten(outTree.value!, tangentsOutFlat);
   }) as OwnedFunction<(...tangents: any[]) => any>;
   fLin.dispose = dispose;
-  return [primalsOut, fLin];
+  return [primalsOutFull, fLin];
 }
 
 // Used in PartialEvalTracer to track recipes for "unknown" partial vals.
@@ -935,10 +970,34 @@ function vjpFlat(
   return [primalsOut, fVjp, dispose];
 }
 
+/** @inline */
+export type VjpOpts = {
+  hasAux?: boolean;
+};
+
+function isOptsWithHasAux(x: any): x is VjpOpts {
+  if (typeof x !== "object" || x === null) return false;
+  if (x.constructor !== Object) return false;
+  const keys = Object.keys(x);
+  return keys.length > 0 && keys.every((k) => k === "hasAux");
+}
+
 export function vjp(
   f: (...primals: any) => any,
-  ...primalsIn: any
-): [any, OwnedFunction<(...cotangents: any) => any>] {
+  ...args: any[]
+):
+  | [any, OwnedFunction<(...cotangents: any) => any>]
+  | [any, OwnedFunction<(...cotangents: any) => any>, any] {
+  // Parse args: first element after f may be opts object
+  let primalsIn: any[];
+  let opts: VjpOpts | undefined;
+  if (args.length > 0 && isOptsWithHasAux(args[0])) {
+    opts = args[0];
+    primalsIn = args.slice(1);
+  } else {
+    primalsIn = args;
+  }
+
   const [primalsInFlat, inTree] = treeFlatten(primalsIn);
   const [fFlat, outTree] = flattenFun(f, inTree);
   const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
@@ -948,7 +1007,29 @@ export function vjp(
   if (outTree.value === undefined) {
     throw new Error("outTree was not set in vjp");
   }
-  const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
+  const primalsOutFull = treeUnflatten(outTree.value, primalsOutFlat);
+
+  if (opts?.hasAux) {
+    const [primalsOut, aux] = primalsOutFull as [any, any];
+    // Capture aux structure now (while aux is still valid) for creating zeros later
+    const auxRef = treeRef(aux);
+    const fVjp = ((cotangentsOut: any) => {
+      const auxZeros = treeMap((x: Tracer) => zerosLike(x.ref), auxRef);
+      const fullCotangents = [cotangentsOut, auxZeros];
+      const [cotangentsOutFlat, outTree2] = treeFlatten(fullCotangents);
+      if (!outTree.value!.equals(outTree2)) {
+        throw new TreeMismatchError("vjp", outTree.value!, outTree2);
+      }
+      const cotangentsInFlat = fVjpFlat(...cotangentsOutFlat.map(pureArray));
+      return treeUnflatten(inTree, cotangentsInFlat);
+    }) as OwnedFunction<(...cotangents: any) => any>;
+    const origDispose = dispose;
+    fVjp.dispose = () => {
+      treeDispose(auxRef);
+      origDispose();
+    };
+    return [primalsOut, fVjp, aux];
+  }
 
   // "cotangentsOut" because pullback
   const fVjp = ((cotangentsOut: any) => {
@@ -961,25 +1042,58 @@ export function vjp(
   }) as OwnedFunction<(...cotangents: any) => any>;
   fVjp.dispose = dispose;
 
-  return [primalsOut, fVjp];
+  return [primalsOutFull, fVjp];
 }
 
-export function grad(f: (...primals: any) => Tracer) {
-  const valueAndGradFn = valueAndGrad(f);
+/** @inline */
+export type GradOpts = {
+  hasAux?: boolean;
+};
+
+export function grad(f: (...primals: any) => Tracer, opts?: GradOpts) {
+  const valueAndGradFn = valueAndGrad(f, opts);
+  if (opts?.hasAux) {
+    return (...x: any) => {
+      const [[y, aux], dx] = valueAndGradFn(...x) as [[any, any], any];
+      y.dispose();
+      return [dx, aux];
+    };
+  }
   return (...x: any) => {
-    const [y, dx] = valueAndGradFn(...x);
+    const [y, dx] = valueAndGradFn(...x) as [any, any];
     y.dispose();
     return dx;
   };
 }
 
-export function valueAndGrad(f: (...primals: any) => Tracer) {
+export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
   return (...x: any) => {
     if (x.length === 0) {
       throw new Error("grad requires at least one argument to differentiate");
     }
     // JAX convention, differentiate with respect to the first argument.
-    const [y, fVjp] = vjp(f, x[0], ...x.slice(1).map(stopGradient));
+    const vjpArgs = opts?.hasAux
+      ? [{ hasAux: true }, x[0], ...x.slice(1).map(stopGradient)]
+      : [x[0], ...x.slice(1).map(stopGradient)];
+    const vjpResult = vjp(f, ...vjpArgs);
+
+    let y: any;
+    let fVjp: OwnedFunction<(...cotangents: any) => any>;
+    let aux: any;
+
+    if (opts?.hasAux) {
+      [y, fVjp, aux] = vjpResult as [
+        any,
+        OwnedFunction<(...cotangents: any) => any>,
+        any,
+      ];
+    } else {
+      [y, fVjp] = vjpResult as [
+        any,
+        OwnedFunction<(...cotangents: any) => any>,
+      ];
+    }
+
     if (!(y instanceof Tracer) || ndim(y) !== 0) {
       throw new TypeError("grad requires a scalar output");
     }
@@ -989,24 +1103,45 @@ export function valueAndGrad(f: (...primals: any) => Tracer) {
     const [ct, ...rest] = fVjp(onesLike(y.ref)); // backprop from scalar 1
     for (const r of rest) treeDispose(r);
     fVjp.dispose();
+
+    if (opts?.hasAux) {
+      return [[y, aux], ct] as [[any, any], any];
+    }
     return [y, ct] as [any, any];
   };
 }
 
+/** @inline */
+export type JacrevOpts = {
+  hasAux?: boolean;
+};
+
 // See also: jacfwd()
-export function jacrev(f: any) {
+export function jacrev(f: any, opts?: JacrevOpts) {
   return function jacobianReverse(x: Tracer) {
     if (x.shape.length !== 1) {
       throw new TypeError("jacrev only supports 1D inputs");
     }
     const [size] = x.shape;
+
+    // Hoist vjp outside vmap for efficiency
+    const vjpResult = opts?.hasAux
+      ? vjp(f, { hasAux: true }, x.ref)
+      : vjp(f, x.ref);
+
+    const [y, fVjp] = vjpResult as [any, OwnedFunction<any>];
+    const aux = opts?.hasAux ? (vjpResult as any)[2] : undefined;
+    y.dispose();
+
     const pullback = (ct: Tracer) => {
-      const [y, fVjp] = vjp(f, x);
-      y.dispose();
       const [ret] = fVjp(ct);
-      fVjp.dispose();
       return ret;
     };
-    return vmap(pullback, [1])(eye(size, undefined, { dtype: x.dtype }));
+    const jacobian = vmap(pullback, [1])(
+      eye(size, undefined, { dtype: x.dtype }),
+    );
+    fVjp.dispose();
+
+    return opts?.hasAux ? [jacobian, aux] : jacobian;
   };
 }

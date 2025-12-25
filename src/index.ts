@@ -41,13 +41,25 @@ export {
  * @function
  * Compute the forward-mode Jacobian-vector product for a function.
  */
-export const jvp = jvpModule.jvp as <
-  F extends (...args: any[]) => JsTree<Array>,
->(
-  f: F,
-  primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
-  tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
-) => [ReturnType<F>, ReturnType<F>];
+export const jvp = jvpModule.jvp as {
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
+    tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
+  ): [ReturnType<F>, ReturnType<F>];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
+    tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
+    opts: { hasAux: true },
+  ): [[ReturnType<F>, any], ReturnType<F>];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
+    tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
+    opts: { hasAux?: false },
+  ): [ReturnType<F>, ReturnType<F>];
+};
 
 /**
  * @function
@@ -64,9 +76,21 @@ export const vmap = vmapModule.vmap as <
  * @function
  * Compute the Jacobian evaluated column-by-column by forward-mode AD.
  */
-export const jacfwd = vmapModule.jacfwd as <F extends (x: Array) => Array>(
-  f: F,
-) => (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
+export const jacfwd = vmapModule.jacfwd as {
+  <F extends (x: Array) => Array>(
+    f: F,
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
+  <F extends (x: Array) => [Array, any]>(
+    f: F,
+    opts: { hasAux: true },
+  ): (
+    ...args: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => [ReturnType<F>[0], ReturnType<F>[1]];
+  <F extends (x: Array) => Array>(
+    f: F,
+    opts: { hasAux?: false },
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
+};
 
 /**
  * @function
@@ -113,62 +137,137 @@ export const jit = jaxprModule.jit as <
  * Produce a local linear approximation to a function at a point using jvp() and
  * partial evaluation.
  */
-export const linearize = linearizeModule.linearize as <
-  F extends (...args: any[]) => JsTree<Array>,
->(
-  f: F,
-  ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-) => [
-  ReturnType<F>,
-  (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>,
-];
+export const linearize = linearizeModule.linearize as {
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ): [
+    ReturnType<F>,
+    (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>,
+  ];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    opts: { hasAux: true },
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ): [
+    [ReturnType<F>, any],
+    (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>,
+  ];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    opts: { hasAux?: false },
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ): [
+    ReturnType<F>,
+    (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>,
+  ];
+};
 
 /**
  * @function
  * Calculate the reverse-mode vector-Jacobian product for a function.
  */
-export const vjp = linearizeModule.vjp as <
-  F extends (...args: any[]) => JsTree<Array>,
->(
-  f: F,
-  ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-) => [
-  ReturnType<F>,
-  (
-    cotangents: MapJsTree<ReturnType<F>, Array, ArrayLike>,
-  ) => MapJsTree<Parameters<F>, ArrayLike, Array>,
-];
+export const vjp = linearizeModule.vjp as {
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ): [
+    ReturnType<F>,
+    (
+      cotangents: MapJsTree<ReturnType<F>, Array, ArrayLike>,
+    ) => MapJsTree<Parameters<F>, ArrayLike, Array>,
+  ];
+  <F extends (...args: any[]) => [JsTree<Array>, any]>(
+    f: F,
+    opts: { hasAux: true },
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ): [
+    ReturnType<F>[0],
+    (
+      cotangents: MapJsTree<ReturnType<F>[0], Array, ArrayLike>,
+    ) => MapJsTree<Parameters<F>, ArrayLike, Array>,
+    ReturnType<F>[1],
+  ];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    opts: { hasAux?: false },
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ): [
+    ReturnType<F>,
+    (
+      cotangents: MapJsTree<ReturnType<F>, Array, ArrayLike>,
+    ) => MapJsTree<Parameters<F>, ArrayLike, Array>,
+  ];
+};
 
 /**
  * @function
  * Compute the gradient of a scalar-valued function `f` with respect to its
  * first argument.
  */
-export const grad = linearizeModule.grad as <
-  F extends (...args: any[]) => JsTree<Array>,
->(
-  f: F,
-) => (
-  ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-) => MapJsTree<Parameters<F>[0], ArrayLike, Array>;
+export const grad = linearizeModule.grad as {
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+  ): (
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => MapJsTree<Parameters<F>[0], ArrayLike, Array>;
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    opts: { hasAux: true },
+  ): (
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => [MapJsTree<Parameters<F>[0], ArrayLike, Array>, any];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    opts: { hasAux?: false },
+  ): (
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => MapJsTree<Parameters<F>[0], ArrayLike, Array>;
+};
 
 /**
  * @function
  * Create a function that evaluates both `f` and the gradient of `f`.
  */
-export const valueAndGrad = linearizeModule.valueAndGrad as <
-  F extends (...args: any[]) => JsTree<Array>,
->(
-  f: F,
-) => (
-  ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-) => [ReturnType<F>, MapJsTree<Parameters<F>[0], ArrayLike, Array>];
+export const valueAndGrad = linearizeModule.valueAndGrad as {
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+  ): (
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => [ReturnType<F>, MapJsTree<Parameters<F>[0], ArrayLike, Array>];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    opts: { hasAux: true },
+  ): (
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => [[ReturnType<F>, any], MapJsTree<Parameters<F>[0], ArrayLike, Array>];
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+    opts: { hasAux?: false },
+  ): (
+    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => [ReturnType<F>, MapJsTree<Parameters<F>[0], ArrayLike, Array>];
+};
 
 /**
  * @function
  * Compute the Jacobian evaluated row-by-row by reverse-mode AD.
  */
-export const jacrev = linearizeModule.jacrev as typeof jacfwd;
+export const jacrev = linearizeModule.jacrev as {
+  <F extends (x: Array) => Array>(
+    f: F,
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
+  <F extends (x: Array) => [Array, any]>(
+    f: F,
+    opts: { hasAux: true },
+  ): (
+    ...args: MapJsTree<Parameters<F>, Array, ArrayLike>
+  ) => [ReturnType<F>[0], ReturnType<F>[1]];
+  <F extends (x: Array) => Array>(
+    f: F,
+    opts: { hasAux?: false },
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
+};
 
 /**
  * @function

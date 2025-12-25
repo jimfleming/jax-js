@@ -1,5 +1,5 @@
 import { assertNonNull, checkAxis, range, rep, unzip2, zip } from "../utils";
-import { arange, eye, pureArray } from "./array";
+import { arange, eye, pureArray, zerosLike } from "./array";
 import {
   AbstractValue,
   add,
@@ -506,13 +506,32 @@ export function vmap(
   };
 }
 
+/** @inline */
+export type JacfwdOpts = {
+  hasAux?: boolean;
+};
+
 // See also: jacrev()
-export function jacfwd(f: any) {
+export function jacfwd(f: any, opts?: JacfwdOpts) {
   return function jacobianForward(x: Tracer) {
     if (x.shape.length !== 1) {
       throw new TypeError("jacfwd only supports 1D inputs");
     }
     const [size] = x.shape;
+
+    if (opts?.hasAux) {
+      const [[primals, aux], tangents] = jvp(f, [x.ref], [zerosLike(x.ref)], {
+        hasAux: true,
+      }) as [[any, any], any];
+      primals.dispose();
+      tangents.dispose();
+      const pushfwd = (v: Tracer) => jvp(f, [x], [v], { hasAux: true })[1];
+      const jacobian = vmap(pushfwd, [0])(
+        eye(size, undefined, { dtype: x.dtype }),
+      );
+      return [jacobian, aux];
+    }
+
     const pushfwd = (v: Tracer) => jvp(f, [x], [v])[1];
     return vmap(pushfwd, [0])(eye(size, undefined, { dtype: x.dtype }));
   };

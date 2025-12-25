@@ -1,5 +1,7 @@
 import {
   grad,
+  jacfwd,
+  jacrev,
   jit,
   jvp,
   linearize,
@@ -7,6 +9,7 @@ import {
   nn,
   numpy as np,
   tree,
+  valueAndGrad,
   vjp,
   vmap,
 } from "@jax-js/jax";
@@ -303,5 +306,115 @@ suite("jax.jit()", () => {
     expect(s(ar.ref).js()).toEqual(21);
     expect(vmap(s)(ar.ref).js()).toEqual([6, 15]);
     expect(vmap(s, 1)(ar).js()).toEqual([5, 7, 9]);
+  });
+});
+
+suite("hasAux parameter", () => {
+  test("jvp with hasAux", () => {
+    // Use .ref before each reuse of x (move semantics)
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref), x.sum()] as [np.Array, np.Array];
+    const [[y, aux], dy] = jvp(f, [np.array([2, 3])], [np.array([1, 0])], {
+      hasAux: true,
+    });
+    expect(y).toBeAllclose(np.array([4, 9]));
+    expect(aux).toBeAllclose(5);
+    expect(dy).toBeAllclose(np.array([4, 0]));
+  });
+
+  test("vjp with hasAux", () => {
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref), x.sum()] as [np.Array, np.Array];
+    const [y, backward, aux] = vjp(f, { hasAux: true }, np.array([2, 3]));
+    expect(y).toBeAllclose(np.array([4, 9]));
+    expect(aux).toBeAllclose(5);
+    expect(backward(np.array([1, 1]))[0]).toBeAllclose(np.array([4, 6]));
+  });
+
+  test("linearize with hasAux", () => {
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref), x.sum()] as [np.Array, np.Array];
+    const [[y, aux], lin] = linearize(f, { hasAux: true }, np.array([2, 3]));
+    expect(y).toBeAllclose(np.array([4, 9]));
+    expect(aux).toBeAllclose(5);
+    expect(lin(np.array([1, 0]))).toBeAllclose(np.array([4, 0]));
+  });
+
+  test("grad with hasAux", () => {
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref).sum(), x.mul(2)] as [np.Array, np.Array];
+    const [dx, aux] = grad(f, { hasAux: true })(np.array([2, 3]));
+    expect(dx).toBeAllclose(np.array([4, 6]));
+    expect(aux).toBeAllclose(np.array([4, 6]));
+  });
+
+  test("valueAndGrad with hasAux", () => {
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref).sum(), x.mul(2)] as [np.Array, np.Array];
+    const [[y, aux], dx] = valueAndGrad(f, { hasAux: true })(np.array([2, 3]));
+    expect(y).toBeAllclose(13);
+    expect(aux).toBeAllclose(np.array([4, 6]));
+    expect(dx).toBeAllclose(np.array([4, 6]));
+  });
+
+  test("jacrev with hasAux", () => {
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref), x.sum()] as [np.Array, np.Array];
+    const [jac, aux] = jacrev(f, { hasAux: true })(np.array([2, 3]));
+    expect(jac).toBeAllclose(
+      np.array([
+        [4, 0],
+        [0, 6],
+      ]),
+    );
+    expect(aux).toBeAllclose(5);
+  });
+
+  test("jacfwd with hasAux", () => {
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref), x.sum()] as [np.Array, np.Array];
+    const [jac, aux] = jacfwd(f, { hasAux: true })(np.array([2, 3]));
+    expect(jac).toBeAllclose(
+      np.array([
+        [4, 0],
+        [0, 6],
+      ]),
+    );
+    expect(aux).toBeAllclose(5);
+  });
+
+  test("grad with hasAux and nested tree aux", () => {
+    // Test hasAux with nested tree structure as auxiliary output
+    const f = (x: np.Array) =>
+      [
+        x.ref.mul(x.ref).sum(),
+        { mean: x.ref.mean(), parts: [np.min(x.ref), np.max(x)] },
+      ] as [np.Array, { mean: np.Array; parts: np.Array[] }];
+    const [dx, aux] = grad(f, { hasAux: true })(np.array([2, 3, 4]));
+    expect(dx).toBeAllclose(np.array([4, 6, 8]));
+    expect(aux.mean).toBeAllclose(3);
+    expect(aux.parts[0]).toBeAllclose(2);
+    expect(aux.parts[1]).toBeAllclose(4);
+  });
+
+  test("jit composed with grad and hasAux", () => {
+    // Test composition: jit(grad(f, { hasAux: true }))
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref).sum(), x.mul(2)] as [np.Array, np.Array];
+    const jitGrad = jit(grad(f, { hasAux: true }));
+    const [dx, aux] = jitGrad(np.array([2, 3]));
+    expect(dx).toBeAllclose(np.array([4, 6]));
+    expect(aux).toBeAllclose(np.array([4, 6]));
+  });
+
+  test("jit composed with valueAndGrad and hasAux", () => {
+    // Test composition: jit(valueAndGrad(f, { hasAux: true }))
+    const f = (x: np.Array) =>
+      [x.ref.mul(x.ref).sum(), x.mul(2)] as [np.Array, np.Array];
+    const jitValueAndGrad = jit(valueAndGrad(f, { hasAux: true }));
+    const [[y, aux], dx] = jitValueAndGrad(np.array([2, 3]));
+    expect(y).toBeAllclose(13);
+    expect(aux).toBeAllclose(np.array([4, 6]));
+    expect(dx).toBeAllclose(np.array([4, 6]));
   });
 });

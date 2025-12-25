@@ -1,6 +1,7 @@
 import { AluOp, isFloatDtype } from "../alu";
 import {
   JsTree,
+  dispose as treeDispose,
   flatten as treeFlatten,
   unflatten as treeUnflatten,
 } from "../tree";
@@ -335,10 +336,16 @@ function jvpFlat(
   return unzip2(tracersOut.map((t) => [t.primal, t.tangent]));
 }
 
+/** @inline */
+export type JvpOpts = {
+  hasAux?: boolean;
+};
+
 export function jvp<F extends (...x: any[]) => any>(
   f: F,
   primals: JsTree<TracerValue>[],
   tangents: JsTree<TracerValue>[],
+  opts?: JvpOpts,
 ): [ReturnType<F>, ReturnType<F>] {
   const [primalsFlat, inTree] = treeFlatten(primals);
   const [tangentsFlat, inTree2] = treeFlatten(tangents);
@@ -356,7 +363,14 @@ export function jvp<F extends (...x: any[]) => any>(
   if (outTree.value === undefined) {
     throw new Error("outTree was not set in jvp");
   }
-  const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
-  const tangentsOut = treeUnflatten(outTree.value, tangentsOutFlat);
-  return [primalsOut as any, tangentsOut as any];
+  const primalsOutFull = treeUnflatten(outTree.value, primalsOutFlat);
+  const tangentsOutFull = treeUnflatten(outTree.value, tangentsOutFlat);
+
+  if (opts?.hasAux) {
+    const [primalsOut, aux] = primalsOutFull as [any, any];
+    const [tangentsOut, auxTangents] = tangentsOutFull as [any, any];
+    treeDispose(auxTangents);
+    return [[primalsOut, aux], tangentsOut] as any;
+  }
+  return [primalsOutFull as any, tangentsOutFull as any];
 }
