@@ -38,6 +38,22 @@ export {
 };
 
 /**
+ * Create options for gradient/differentiation functions.
+ *
+ * Use this helper to create options for `grad()`, `vjp()`, `linearize()`, and
+ * related automatic differentiation functions.
+ *
+ * @example
+ * ```typescript
+ * import { vjp, gradOpts } from 'jax-js';
+ *
+ * const f = (x, y) => [x.mul(y), { debug: "info" }];
+ * const [result, pullback, aux] = vjp(f, gradOpts({ hasAux: true }), x, y);
+ * ```
+ */
+export const gradOpts = linearizeModule.gradOpts;
+
+/**
  * @function
  * Compute the forward-mode Jacobian-vector product for a function.
  */
@@ -46,19 +62,8 @@ export const jvp = jvpModule.jvp as {
     f: F,
     primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
     tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
-  ): [ReturnType<F>, ReturnType<F>];
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
-    tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
-    opts: { hasAux: true },
-  ): [[ReturnType<F>, any], ReturnType<F>];
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
-    tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
-    opts: { hasAux?: false },
-  ): [ReturnType<F>, ReturnType<F>];
+    opts?: jvpModule.JvpOpts,
+  ): [ReturnType<F>, ReturnType<F>] | [[ReturnType<F>, any], ReturnType<F>];
 };
 
 /**
@@ -77,19 +82,10 @@ export const vmap = vmapModule.vmap as <
  * Compute the Jacobian evaluated column-by-column by forward-mode AD.
  */
 export const jacfwd = vmapModule.jacfwd as {
-  <F extends (x: Array) => Array>(
+  <F extends (x: Array) => Array | [Array, any]>(
     f: F,
-  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
-  <F extends (x: Array) => [Array, any]>(
-    f: F,
-    opts: { hasAux: true },
-  ): (
-    ...args: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => [ReturnType<F>[0], ReturnType<F>[1]];
-  <F extends (x: Array) => Array>(
-    f: F,
-    opts: { hasAux?: false },
-  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
+    opts?: vmapModule.JacfwdOpts,
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F> | [ReturnType<F>, any];
 };
 
 /**
@@ -147,18 +143,10 @@ export const linearize = linearizeModule.linearize as {
   ];
   <F extends (...args: any[]) => JsTree<Array>>(
     f: F,
-    opts: { hasAux: true },
+    opts: linearizeModule.LinearizeOpts,
     ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
   ): [
     [ReturnType<F>, any],
-    (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>,
-  ];
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    opts: { hasAux?: false },
-    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ): [
-    ReturnType<F>,
     (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>,
   ];
 };
@@ -179,7 +167,7 @@ export const vjp = linearizeModule.vjp as {
   ];
   <F extends (...args: any[]) => [JsTree<Array>, any]>(
     f: F,
-    opts: { hasAux: true },
+    opts: linearizeModule.VjpOpts,
     ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
   ): [
     ReturnType<F>[0],
@@ -187,16 +175,6 @@ export const vjp = linearizeModule.vjp as {
       cotangents: MapJsTree<ReturnType<F>[0], Array, ArrayLike>,
     ) => MapJsTree<Parameters<F>, ArrayLike, Array>,
     ReturnType<F>[1],
-  ];
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    opts: { hasAux?: false },
-    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ): [
-    ReturnType<F>,
-    (
-      cotangents: MapJsTree<ReturnType<F>, Array, ArrayLike>,
-    ) => MapJsTree<Parameters<F>, ArrayLike, Array>,
   ];
 };
 
@@ -208,21 +186,10 @@ export const vjp = linearizeModule.vjp as {
 export const grad = linearizeModule.grad as {
   <F extends (...args: any[]) => JsTree<Array>>(
     f: F,
+    opts?: linearizeModule.GradOpts,
   ): (
     ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => MapJsTree<Parameters<F>[0], ArrayLike, Array>;
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    opts: { hasAux: true },
-  ): (
-    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => [MapJsTree<Parameters<F>[0], ArrayLike, Array>, any];
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    opts: { hasAux?: false },
-  ): (
-    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => MapJsTree<Parameters<F>[0], ArrayLike, Array>;
+  ) => MapJsTree<Parameters<F>[0], ArrayLike, Array> | [MapJsTree<Parameters<F>[0], ArrayLike, Array>, any];
 };
 
 /**
@@ -232,21 +199,10 @@ export const grad = linearizeModule.grad as {
 export const valueAndGrad = linearizeModule.valueAndGrad as {
   <F extends (...args: any[]) => JsTree<Array>>(
     f: F,
+    opts?: linearizeModule.GradOpts,
   ): (
     ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => [ReturnType<F>, MapJsTree<Parameters<F>[0], ArrayLike, Array>];
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    opts: { hasAux: true },
-  ): (
-    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => [[ReturnType<F>, any], MapJsTree<Parameters<F>[0], ArrayLike, Array>];
-  <F extends (...args: any[]) => JsTree<Array>>(
-    f: F,
-    opts: { hasAux?: false },
-  ): (
-    ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => [ReturnType<F>, MapJsTree<Parameters<F>[0], ArrayLike, Array>];
+  ) => [ReturnType<F>, MapJsTree<Parameters<F>[0], ArrayLike, Array>] | [[ReturnType<F>, any], MapJsTree<Parameters<F>[0], ArrayLike, Array>];
 };
 
 /**
@@ -254,19 +210,10 @@ export const valueAndGrad = linearizeModule.valueAndGrad as {
  * Compute the Jacobian evaluated row-by-row by reverse-mode AD.
  */
 export const jacrev = linearizeModule.jacrev as {
-  <F extends (x: Array) => Array>(
+  <F extends (x: Array) => Array | [Array, any]>(
     f: F,
-  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
-  <F extends (x: Array) => [Array, any]>(
-    f: F,
-    opts: { hasAux: true },
-  ): (
-    ...args: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => [ReturnType<F>[0], ReturnType<F>[1]];
-  <F extends (x: Array) => Array>(
-    f: F,
-    opts: { hasAux?: false },
-  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
+    opts?: linearizeModule.JacrevOpts,
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F> | [ReturnType<F>, any];
 };
 
 /**

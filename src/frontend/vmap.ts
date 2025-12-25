@@ -56,6 +56,7 @@ import {
 } from "../tree";
 import { Jaxpr, jaxprAsFun, makeJaxpr } from "./jaxpr";
 import { jvp } from "./jvp";
+import { gradOpts } from "./linearize";
 
 function mappedAval(batchDim: number, aval: AbstractValue) {
   const shape = [...aval.shape];
@@ -520,12 +521,16 @@ export function jacfwd(f: any, opts?: JacfwdOpts) {
     const [size] = x.shape;
 
     if (opts?.hasAux) {
-      const [[primals, aux], tangents] = jvp(f, [x.ref], [zerosLike(x.ref)], {
-        hasAux: true,
-      }) as [[any, any], any];
+      const [[primals, aux], tangents] = jvp(
+        f,
+        [x.ref],
+        [zerosLike(x.ref)],
+        gradOpts({ hasAux: true }),
+      ) as [[any, any], any];
       primals.dispose();
       tangents.dispose();
-      const pushfwd = (v: Tracer) => jvp(f, [x], [v], { hasAux: true })[1];
+      const pushfwd = (v: Tracer) =>
+        jvp(f, [x], [v], gradOpts({ hasAux: true }))[1];
       const jacobian = vmap(pushfwd, [0])(
         eye(size, undefined, { dtype: x.dtype }),
       );

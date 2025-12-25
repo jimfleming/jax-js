@@ -154,10 +154,33 @@ function linearizeFlat(
   return [primalsOut, fLin, dispose];
 }
 
-/** @inline */
-export type LinearizeOpts = {
+// Symbol for branding gradient/differentiation options
+const GRAD_OPTS = Symbol("GradOpts");
+
+// Base type for gradient options (not exported directly)
+type GradOptsBase = {
   hasAux?: boolean;
+  [GRAD_OPTS]: true;
 };
+
+/**
+ * Create options for gradient/differentiation functions.
+ *
+ * Use this helper to create options for `grad()`, `vjp()`, `linearize()`, and
+ * related automatic differentiation functions.
+ *
+ * @example
+ * ```typescript
+ * const f = (x, y) => [x.mul(y), { debug: "info" }];
+ * const [result, pullback, aux] = vjp(f, gradOpts({ hasAux: true }), x, y);
+ * ```
+ */
+export function gradOpts(options: { hasAux?: boolean }): GradOptsBase {
+  return { ...options, [GRAD_OPTS]: true };
+}
+
+/** @inline */
+export type LinearizeOpts = GradOptsBase;
 
 export function linearize(
   f: (...primals: any[]) => any,
@@ -166,7 +189,7 @@ export function linearize(
   // Parse args: first element after f may be opts object
   let primalsIn: any[];
   let opts: LinearizeOpts | undefined;
-  if (args.length > 0 && isOptsWithHasAux(args[0])) {
+  if (args.length > 0 && isGradOpts(args[0])) {
     opts = args[0];
     primalsIn = args.slice(1);
   } else {
@@ -971,15 +994,11 @@ function vjpFlat(
 }
 
 /** @inline */
-export type VjpOpts = {
-  hasAux?: boolean;
-};
+export type VjpOpts = GradOptsBase;
 
-function isOptsWithHasAux(x: any): x is VjpOpts {
-  if (typeof x !== "object" || x === null) return false;
-  if (x.constructor !== Object) return false;
-  const keys = Object.keys(x);
-  return keys.length > 0 && keys.every((k) => k === "hasAux");
+// Internal type guard for checking if an argument is gradient options
+function isGradOpts(x: any): x is GradOptsBase {
+  return x?.[GRAD_OPTS] === true;
 }
 
 export function vjp(
@@ -991,7 +1010,7 @@ export function vjp(
   // Parse args: first element after f may be opts object
   let primalsIn: any[];
   let opts: VjpOpts | undefined;
-  if (args.length > 0 && isOptsWithHasAux(args[0])) {
+  if (args.length > 0 && isGradOpts(args[0])) {
     opts = args[0];
     primalsIn = args.slice(1);
   } else {
@@ -1046,9 +1065,7 @@ export function vjp(
 }
 
 /** @inline */
-export type GradOpts = {
-  hasAux?: boolean;
-};
+export type GradOpts = GradOptsBase;
 
 export function grad(f: (...primals: any) => Tracer, opts?: GradOpts) {
   const valueAndGradFn = valueAndGrad(f, opts);
@@ -1073,7 +1090,7 @@ export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
     }
     // JAX convention, differentiate with respect to the first argument.
     const vjpArgs = opts?.hasAux
-      ? [{ hasAux: true }, x[0], ...x.slice(1).map(stopGradient)]
+      ? [gradOpts({ hasAux: true }), x[0], ...x.slice(1).map(stopGradient)]
       : [x[0], ...x.slice(1).map(stopGradient)];
     const vjpResult = vjp(f, ...vjpArgs);
 
@@ -1112,9 +1129,7 @@ export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
 }
 
 /** @inline */
-export type JacrevOpts = {
-  hasAux?: boolean;
-};
+export type JacrevOpts = GradOptsBase;
 
 // See also: jacfwd()
 export function jacrev(f: any, opts?: JacrevOpts) {
@@ -1126,7 +1141,7 @@ export function jacrev(f: any, opts?: JacrevOpts) {
 
     // Hoist vjp outside vmap for efficiency
     const vjpResult = opts?.hasAux
-      ? vjp(f, { hasAux: true }, x.ref)
+      ? vjp(f, gradOpts({ hasAux: true }), x.ref)
       : vjp(f, x.ref);
 
     const [y, fVjp] = vjpResult as [any, OwnedFunction<any>];
