@@ -177,11 +177,6 @@ export function linearize(
 ): [[any, any], OwnedFunction<(...tangents: any[]) => any>];
 export function linearize(
   f: (...primals: any[]) => any,
-  opts: LinearizeOpts & { hasAux?: false | undefined },
-  ...primals: any[]
-): [any, OwnedFunction<(...tangents: any[]) => any>];
-export function linearize(
-  f: (...primals: any[]) => any,
   ...primals: any[]
 ): [any, OwnedFunction<(...tangents: any[]) => any>];
 export function linearize(
@@ -1002,11 +997,6 @@ export function vjp(
 ): [any, OwnedFunction<(...cotangents: any) => any>, any];
 export function vjp(
   f: (...primals: any) => any,
-  opts: VjpOpts & { hasAux?: false | undefined },
-  ...primals: any[]
-): [any, OwnedFunction<(...cotangents: any) => any>];
-export function vjp(
-  f: (...primals: any) => any,
   ...primals: any[]
 ): [any, OwnedFunction<(...cotangents: any) => any>];
 export function vjp(
@@ -1081,23 +1071,21 @@ export function grad(
   opts: GradOpts & { hasAux: true }
 ): (...x: any) => [any, any];
 export function grad(
-  f: (...primals: any) => Tracer,
-  opts: GradOpts & { hasAux?: false | undefined }
-): (...x: any) => any;
-export function grad(
   f: (...primals: any) => Tracer
 ): (...x: any) => any;
 export function grad(f: (...primals: any) => Tracer, opts?: GradOpts): (...x: any) => any {
-  const valueAndGradFn = opts !== undefined ? valueAndGrad(f, opts) : valueAndGrad(f);
+  // Use explicit type narrowing to avoid overload resolution issues
   if (opts?.hasAux) {
+    const valueAndGradFn = valueAndGrad(f, opts as GradOpts & { hasAux: true });
     return (...x: any) => {
-      const [[y, aux], dx] = valueAndGradFn(...x) as [[any, any], any];
+      const [[y, aux], dx] = valueAndGradFn(...x);
       y.dispose();
       return [dx, aux];
     };
   }
+  const valueAndGradFn = valueAndGrad(f);
   return (...x: any) => {
-    const [y, dx] = valueAndGradFn(...x) as [any, any];
+    const [y, dx] = valueAndGradFn(...x);
     y.dispose();
     return dx;
   };
@@ -1108,10 +1096,6 @@ export function valueAndGrad(
   f: (...primals: any) => Tracer,
   opts: GradOpts & { hasAux: true }
 ): (...x: any) => [[any, any], any];
-export function valueAndGrad(
-  f: (...primals: any) => Tracer,
-  opts: GradOpts & { hasAux?: false | undefined }
-): (...x: any) => [any, any];
 export function valueAndGrad(
   f: (...primals: any) => Tracer
 ): (...x: any) => [any, any];
@@ -1162,10 +1146,6 @@ export function jacrev(
   f: any,
   opts: JacrevOpts & { hasAux: true }
 ): (x: Tracer) => [any, any];
-export function jacrev(
-  f: any,
-  opts: JacrevOpts & { hasAux?: false | undefined }
-): (x: Tracer) => any;
 export function jacrev(f: any): (x: Tracer) => any;
 // See also: jacfwd()
 export function jacrev(f: any, opts?: JacrevOpts): (x: Tracer) => any {
