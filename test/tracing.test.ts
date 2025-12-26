@@ -361,9 +361,10 @@ suite("hasAux parameter", () => {
   test("valueAndGrad with hasAux", () => {
     const f = (x: np.Array) =>
       [x.ref.mul(x.ref).sum(), x.mul(2)] as [np.Array, np.Array];
-    const [[y, aux], dx] = valueAndGrad(f, gradOpts({ hasAux: true }))(
-      np.array([2, 3]),
-    );
+    const [[y, aux], dx] = valueAndGrad(
+      f,
+      gradOpts({ hasAux: true }),
+    )(np.array([2, 3]));
     expect(y).toBeAllclose(13);
     expect(aux).toBeAllclose(np.array([4, 6]));
     expect(dx).toBeAllclose(np.array([4, 6]));

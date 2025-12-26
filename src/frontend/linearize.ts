@@ -159,29 +159,35 @@ type GradOptsBase = {
   [GRAD_OPTS]: true;
 };
 
-/**
- * Create options for gradient/differentiation functions.
- *
- * Use this helper to create options for `grad()`, `vjp()`, `linearize()`, and
- * related automatic differentiation functions.
- *
- * @example
- * ```typescript
- * const f = (x, y) => [x.mul(y), { debug: "info" }];
- * const [result, pullback, aux] = vjp(f, gradOpts({ hasAux: true }), x, y);
- * ```
- */
-export function gradOpts(options: { hasAux?: boolean }): GradOptsBase {
+/** Create options for gradient/differentiation functions. */
+export function gradOpts(options: { hasAux: true }): GradOptsBase & { hasAux: true };
+export function gradOpts(options?: { hasAux?: boolean }): GradOptsBase;
+export function gradOpts(options?: { hasAux?: boolean }): GradOptsBase {
   return { ...options, [GRAD_OPTS]: true };
 }
 
 /** @inline */
 export type LinearizeOpts = GradOptsBase;
 
+// Function overloads for linearize to discriminate return types
+export function linearize(
+  f: (...primals: any[]) => any,
+  opts: LinearizeOpts & { hasAux: true },
+  ...primals: any[]
+): [[any, any], OwnedFunction<(...tangents: any[]) => any>];
+export function linearize(
+  f: (...primals: any[]) => any,
+  opts: LinearizeOpts & { hasAux?: false | undefined },
+  ...primals: any[]
+): [any, OwnedFunction<(...tangents: any[]) => any>];
+export function linearize(
+  f: (...primals: any[]) => any,
+  ...primals: any[]
+): [any, OwnedFunction<(...tangents: any[]) => any>];
 export function linearize(
   f: (...primals: any[]) => any,
   ...args: any[]
-): [any, OwnedFunction<(...tangents: any[]) => any>] {
+): [any, OwnedFunction<(...tangents: any[]) => any>] | [[any, any], OwnedFunction<(...tangents: any[]) => any>] {
   // Parse args: first element after f may be opts object
   let primalsIn: any[];
   let opts: LinearizeOpts | undefined;
@@ -988,6 +994,21 @@ function isGradOpts(x: any): x is GradOptsBase {
   return x?.[GRAD_OPTS] === true;
 }
 
+// Function overloads for vjp to discriminate return types
+export function vjp(
+  f: (...primals: any) => any,
+  opts: VjpOpts & { hasAux: true },
+  ...primals: any[]
+): [any, OwnedFunction<(...cotangents: any) => any>, any];
+export function vjp(
+  f: (...primals: any) => any,
+  opts: VjpOpts & { hasAux?: false | undefined },
+  ...primals: any[]
+): [any, OwnedFunction<(...cotangents: any) => any>];
+export function vjp(
+  f: (...primals: any) => any,
+  ...primals: any[]
+): [any, OwnedFunction<(...cotangents: any) => any>];
 export function vjp(
   f: (...primals: any) => any,
   ...args: any[]
@@ -1054,8 +1075,20 @@ export function vjp(
 /** @inline */
 export type GradOpts = GradOptsBase;
 
-export function grad(f: (...primals: any) => Tracer, opts?: GradOpts) {
-  const valueAndGradFn = valueAndGrad(f, opts);
+// Function overloads for grad to discriminate return types
+export function grad(
+  f: (...primals: any) => Tracer,
+  opts: GradOpts & { hasAux: true }
+): (...x: any) => [any, any];
+export function grad(
+  f: (...primals: any) => Tracer,
+  opts: GradOpts & { hasAux?: false | undefined }
+): (...x: any) => any;
+export function grad(
+  f: (...primals: any) => Tracer
+): (...x: any) => any;
+export function grad(f: (...primals: any) => Tracer, opts?: GradOpts): (...x: any) => any {
+  const valueAndGradFn = opts !== undefined ? valueAndGrad(f, opts) : valueAndGrad(f);
   if (opts?.hasAux) {
     return (...x: any) => {
       const [[y, aux], dx] = valueAndGradFn(...x) as [[any, any], any];
@@ -1070,32 +1103,38 @@ export function grad(f: (...primals: any) => Tracer, opts?: GradOpts) {
   };
 }
 
-export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
+// Function overloads for valueAndGrad to discriminate return types
+export function valueAndGrad(
+  f: (...primals: any) => Tracer,
+  opts: GradOpts & { hasAux: true }
+): (...x: any) => [[any, any], any];
+export function valueAndGrad(
+  f: (...primals: any) => Tracer,
+  opts: GradOpts & { hasAux?: false | undefined }
+): (...x: any) => [any, any];
+export function valueAndGrad(
+  f: (...primals: any) => Tracer
+): (...x: any) => [any, any];
+export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts): (...x: any) => any {
   return (...x: any) => {
     if (x.length === 0) {
       throw new Error("grad requires at least one argument to differentiate");
     }
     // JAX convention, differentiate with respect to the first argument.
-    const vjpArgs = opts?.hasAux
-      ? [gradOpts({ hasAux: true }), x[0], ...x.slice(1).map(stopGradient)]
-      : [x[0], ...x.slice(1).map(stopGradient)];
-    const vjpResult = vjp(f, ...vjpArgs);
-
     let y: any;
     let fVjp: OwnedFunction<(...cotangents: any) => any>;
     let aux: any;
 
     if (opts?.hasAux) {
-      [y, fVjp, aux] = vjpResult as [
-        any,
-        OwnedFunction<(...cotangents: any) => any>,
-        any,
-      ];
+      const vjpResult = vjp(
+        f,
+        gradOpts({ hasAux: true }),
+        x[0],
+        ...x.slice(1).map(stopGradient)
+      ) as [any, OwnedFunction<(...cotangents: any) => any>, any];
+      [y, fVjp, aux] = vjpResult;
     } else {
-      [y, fVjp] = vjpResult as [
-        any,
-        OwnedFunction<(...cotangents: any) => any>,
-      ];
+      [y, fVjp] = vjp(f, x[0], ...x.slice(1).map(stopGradient));
     }
 
     if (!(y instanceof Tracer) || ndim(y) !== 0) {
@@ -1118,8 +1157,18 @@ export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
 /** @inline */
 export type JacrevOpts = GradOptsBase;
 
+// Function overloads for jacrev to discriminate return types
+export function jacrev(
+  f: any,
+  opts: JacrevOpts & { hasAux: true }
+): (x: Tracer) => [any, any];
+export function jacrev(
+  f: any,
+  opts: JacrevOpts & { hasAux?: false | undefined }
+): (x: Tracer) => any;
+export function jacrev(f: any): (x: Tracer) => any;
 // See also: jacfwd()
-export function jacrev(f: any, opts?: JacrevOpts) {
+export function jacrev(f: any, opts?: JacrevOpts): (x: Tracer) => any {
   return function jacobianReverse(x: Tracer) {
     if (x.shape.length !== 1) {
       throw new TypeError("jacrev only supports 1D inputs");
