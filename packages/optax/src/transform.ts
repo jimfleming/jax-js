@@ -113,9 +113,11 @@ export function scaleByLearningRate(
   return scale(m * learningRate);
 }
 
+export type MaskFn = (tree: JsTree<np.Array>) => JsTree<np.Array>;
+
 export type AddDecayedWeightsOptions = {
   weightDecay?: ScalarOrSchedule;
-  mask?: JsTree<np.Array> | null;
+  mask?: JsTree<np.Array> | MaskFn | null;
 };
 
 /** Adds parameter scaled by weight decay (L2 regularization). */
@@ -160,11 +162,16 @@ export function addDecayedWeights({
 
       let decayedParams: JsTree<np.Array>;
       if (mask) {
+        // Resolve mask - if it's a function, call it with updates
+        const maskTree = typeof mask === "function"
+          ? mask(tree.ref(updates))
+          : mask;
+
         // Apply mask: multiply params by mask, then by weight decay
         decayedParams = tree.map(
           (p: np.Array, m: np.Array) => p.mul(m).mul(currentWeightDecay),
           tree.ref(params),
-          mask
+          maskTree
         );
       } else {
         // Apply weight decay to all parameters
@@ -207,7 +214,7 @@ export function trace({
       tree.dispose(params);
       let { trace: prevTrace } = state as { trace: JsTree<np.Array> };
 
-      // Python: new_trace = g + decay * t
+      // new_trace = g + decay * t
       const newTrace = tree.map(
         (g: np.Array, t: np.Array) => g.add(t.mul(decay)),
         tree.ref(updates),
