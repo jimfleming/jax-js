@@ -4,6 +4,7 @@
     defaultDevice,
     init,
     jit,
+    lax,
     nn,
     numpy as np,
   } from "@jax-js/jax";
@@ -11,10 +12,16 @@
 
   import { runBenchmark } from "$lib/benchmark";
   import DownloadManager from "$lib/common/DownloadManager.svelte";
-  import { countMethodCalls } from "$lib/profiling";
+  import { countMethodCalls, isMobile } from "$lib/profiling";
   import { COCO_CLASSES, stringToColor } from "./coco";
 
+  const width = 800;
+  const height = 800;
+  const downsampleFactor = isMobile() ? 2 : 1;
+
   let canvasEl: HTMLCanvasElement;
+  let videoEl: HTMLVideoElement;
+
   let downloadManager: DownloadManager;
   let onnxModel: ONNXModel;
   let onnxModelRun: any;
@@ -22,6 +29,12 @@
     null;
 
   let runCount = 0;
+  let webcamStream: MediaStream | null = null;
+  let inputSource: "example" | "webcam" = $state("example");
+  let isFrontCamera = $state(false);
+  let isLooping = $state(false);
+
+  let detections: Detection[] = [];
 
   interface Detection {
     label: string;
@@ -34,6 +47,7 @@
 
   function drawDetections(detections: Detection[]) {
     const ctx = canvasEl.getContext("2d")!;
+
     const imgW = canvasEl.width;
     const imgH = canvasEl.height;
 
@@ -55,13 +69,16 @@
       const text = `${label}: ${(prob * 100).toFixed(1)}%`;
       ctx.font = "bold 14px sans-serif";
       const textMetrics = ctx.measureText(text);
-      const textH = 18;
+      const textH = 14;
       ctx.fillStyle = color;
-      ctx.fillRect(x1, y1 - textH, textMetrics.width + 8, textH);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x1, y1 - textH, textMetrics.width + 4, textH);
+      ctx.fillRect(x1, y1 - textH, textMetrics.width + 4, textH);
 
       // Draw label text
       ctx.fillStyle = "#ffffff";
-      ctx.fillText(text, x1 + 4, y1 - 4);
+      ctx.fillText(text, x1 + 2, y1 - 2);
     }
   }
 
@@ -75,49 +92,130 @@
     return imageUrls[runCount++ % imageUrls.length];
   }
 
-  async function loadImage(url: string): Promise<{
+  async function startWebcam() {
+    if (webcamStream) return;
+    webcamStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width, height },
+    });
+    videoEl.srcObject = webcamStream;
+    await videoEl.play();
+
+    // Check if we got a front-facing camera
+    // On desktop, facingMode is often undefined, so assume front camera (mirror by default)
+    const track = webcamStream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    isFrontCamera = settings.facingMode !== "environment";
+  }
+
+  function stopWebcam() {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach((track) => track.stop());
+      webcamStream = null;
+      videoEl.srcObject = null;
+    }
+  }
+
+  async function onInputSourceChange() {
+    if (inputSource === "webcam") {
+      await startWebcam();
+    } else {
+      stopWebcam();
+    }
+  }
+
+  async function loadImage(source: "example" | "webcam"): Promise<{
     pixelValues: np.Array;
     pixelMask: np.Array;
   }> {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = url;
-    });
-
-    // Center crop to square, then resize to 800x800
-    const size = 800;
-    const { width: origW, height: origH } = img;
-    const cropSize = Math.min(origW, origH);
-    const sx = (origW - cropSize) / 2;
-    const sy = (origH - cropSize) / 2;
-
-    // Draw on the visible canvas
-    canvasEl.width = size;
-    canvasEl.height = size;
+    canvasEl.width = width;
+    canvasEl.height = height;
     const ctx = canvasEl.getContext("2d", { willReadFrequently: true })!;
-    ctx.drawImage(img, sx, sy, cropSize, cropSize, 0, 0, size, size);
 
-    const imageData = ctx.getImageData(0, 0, size, size);
+    if (source === "webcam") {
+      // Draw current video frame, center cropped to square
+      const { videoWidth: origW, videoHeight: origH } = videoEl;
+      const cropWidth = Math.min(origW, (origH * width) / height);
+      const cropHeight = Math.min(origH, (origW * height) / width);
+      const sx = (origW - cropWidth) / 2;
+      const sy = (origH - cropHeight) / 2;
+      if (isFrontCamera) {
+        // Mirror front camera horizontally
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.drawImage(
+          videoEl,
+          sx,
+          sy,
+          cropWidth,
+          cropHeight,
+          -cropWidth,
+          0,
+          width,
+          height,
+        );
+        ctx.restore();
+      } else {
+        ctx.drawImage(
+          videoEl,
+          sx,
+          sy,
+          cropWidth,
+          cropHeight,
+          0,
+          0,
+          width,
+          height,
+        );
+      }
+    } else {
+      // Load example image
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const url = getImageUrl();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = url;
+      });
+
+      // Center crop to square, then resize to WxH
+      const { width: origW, height: origH } = img;
+      const cropWidth = Math.min(origW, (origH * width) / height);
+      const cropHeight = Math.min(origH, (origW * height) / width);
+      const sx = (origW - cropWidth) / 2;
+      const sy = (origH - cropHeight) / 2;
+      ctx.drawImage(img, sx, sy, cropWidth, cropHeight, 0, 0, width, height);
+    }
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    drawDetections(detections);
     const pixels = imageData.data; // RGBA
 
     // ImageNet normalization constants
     const mean = [0.485, 0.456, 0.406];
     const std = [0.229, 0.224, 0.225];
 
-    // Convert to [1, 3, 800, 800] float32, with ImageNet normalization
-    const pixelValues = np
+    // Convert to [1, 3, W, H] float32, with ImageNet normalization
+    let pixelValues = np
       .array(new Float32Array(new Uint8Array(pixels.buffer)), {
-        shape: [size, size, 4],
+        shape: [width, height, 4],
       })
       .slice([], [], [0, 3]) // RGB channels
       .mul(1 / 255)
       .sub(np.array(mean))
       .div(np.array(std))
-      .transpose([2, 0, 1]) // to [3, 800, 800]
-      .reshape([1, 3, size, size]);
+      .transpose([2, 0, 1]) // to [3, W, H]
+      .reshape([1, 3, width, height]);
+
+    if (downsampleFactor > 1) {
+      // Downsample by factor of 2 using average pooling
+      pixelValues = lax.reduceWindow(
+        pixelValues,
+        np.mean,
+        [downsampleFactor, downsampleFactor],
+        [downsampleFactor, downsampleFactor],
+      );
+    }
 
     // Pixel mask: Transformers.js hardcodes this to [batch, 64, 64]
     const pixelMask = np.ones([1, 64, 64], { dtype: np.int32 });
@@ -147,7 +245,7 @@
         }
       }
       // Filter by confidence threshold
-      if (bestProb > 0.5) {
+      if (bestProb > 0.75) {
         const [cx, cy, w, h] = predBoxes[i];
         detections.push({
           label: COCO_CLASSES[bestClass],
@@ -182,9 +280,8 @@
       console.log("ONNX Model loaded:", onnxModel);
     }
 
-    const imageUrl = getImageUrl();
-    console.log(`Loading image: ${imageUrl}`);
-    const { pixelValues, pixelMask } = await loadImage(imageUrl);
+    console.log(`Loading image from: ${inputSource}`);
+    const { pixelValues, pixelMask } = await loadImage(inputSource);
     console.log("Image loaded:", pixelValues.shape);
 
     console.log("Running forward pass...");
@@ -221,8 +318,12 @@
       `jax-js dispatch count: ${dispatchCount()}, buffer creates: ${bufferCreateCount()}`,
     );
 
-    const detections = await processOutput(logitsData!, boxesData!);
+    detections = await processOutput(logitsData!, boxesData!);
     drawDetections(detections);
+
+    if (isLooping) {
+      requestAnimationFrame(() => loadAndRun());
+    }
   }
 
   async function loadAndRunOrt() {
@@ -241,12 +342,11 @@
       console.log("ORT Session loaded:", ortSession);
     }
 
-    const imageUrl = getImageUrl();
-    console.log(`Loading image: ${imageUrl}`);
-    const imageData = await loadImage(imageUrl);
-    const pixelValues = (await imageData.pixelValues.data()) as Float32Array;
+    console.log(`Loading image from: ${inputSource}`);
+    const loadedImage = await loadImage(inputSource);
+    const pixelValues = (await loadedImage.pixelValues.data()) as Float32Array;
     const pixelMask = new BigInt64Array(
-      [...(await imageData.pixelMask.data())].map(BigInt),
+      [...(await loadedImage.pixelMask.data())].map(BigInt),
     );
     console.log("Image loaded for ORT");
 
@@ -262,11 +362,12 @@
     const bufferCreateCount = countMethodCalls(GPUDevice, "createBuffer");
 
     const seconds = await runBenchmark("detr-resnet-50-ort", async () => {
-      const tensorPixelValues = new ort.Tensor(
-        "float32",
-        pixelValues,
-        [1, 3, 800, 800],
-      );
+      const tensorPixelValues = new ort.Tensor("float32", pixelValues, [
+        1,
+        3,
+        width / downsampleFactor,
+        height / downsampleFactor,
+      ]);
       const tensorPixelMask = new ort.Tensor("int64", pixelMask, [1, 64, 64]);
 
       const outputs = await ortSession!.run({
@@ -284,24 +385,79 @@
       `ORT dispatch count: ${dispatchCount()}, buffer creates: ${bufferCreateCount()}`,
     );
 
-    const detections = await processOutput(logitsData!, boxesData!);
+    detections = await processOutput(logitsData!, boxesData!);
     drawDetections(detections);
+
+    if (isLooping) {
+      requestAnimationFrame(() => loadAndRunOrt());
+    }
+  }
+
+  function stopLoop() {
+    isLooping = false;
   }
 </script>
 
 <DownloadManager bind:this={downloadManager} />
 
 <main class="p-4">
-  <div class="flex gap-2">
-    <button onclick={loadAndRun} class="border px-2">
-      Load & Run (jax-js)
-    </button>
-    <button onclick={loadAndRunOrt} class="border px-2">
-      Load & Run (onnxruntime-web)
-    </button>
+  <div class="flex flex-col gap-2">
+    <div>
+      <label>
+        Input source:
+        <select
+          bind:value={inputSource}
+          onchange={onInputSourceChange}
+          class="border px-1 rounded"
+        >
+          <option value="example">Example images</option>
+          <option value="webcam">Webcam</option>
+        </select>
+      </label>
+    </div>
+    <div class="flex gap-2 items-center">
+      {#if isLooping}
+        <button onclick={stopLoop} class="border px-2">Stop</button>
+      {:else}
+        <button
+          onclick={() => {
+            if (inputSource === "webcam") isLooping = true;
+            else detections = [];
+            loadAndRun();
+          }}
+        >
+          Load & Run (jax-js)
+        </button>
+        <button
+          onclick={() => {
+            if (inputSource === "webcam") isLooping = true;
+            else detections = [];
+            loadAndRunOrt();
+          }}
+        >
+          Load & Run (onnx)
+        </button>
+      {/if}
+    </div>
   </div>
-  <div class="mt-4">
-    <canvas bind:this={canvasEl} class="border" width="800" height="800"
-    ></canvas>
+  <div class="mt-4 -mx-4 sm:mx-0">
+    <video
+      bind:this={videoEl}
+      class="hidden"
+      class:-scale-x-100={isFrontCamera}
+      {width}
+      {height}
+      playsinline
+      muted
+    ></video>
+    <canvas bind:this={canvasEl} class="max-w-full" {width} {height}></canvas>
   </div>
 </main>
+
+<style lang="postcss">
+  @reference "$app.css";
+
+  button {
+    @apply border rounded px-2 hover:bg-gray-100 active:scale-95;
+  }
+</style>

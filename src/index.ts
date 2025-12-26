@@ -2,7 +2,7 @@ import { DType } from "./alu";
 import { defaultDevice, Device, devices, getBackend, init } from "./backend";
 import { Array, ArrayLike } from "./frontend/array";
 import * as jaxprModule from "./frontend/jaxpr";
-import { Jaxpr, OwnedFunction } from "./frontend/jaxpr";
+import { ClosedJaxpr, Jaxpr, OwnedFunction } from "./frontend/jaxpr";
 import * as jvpModule from "./frontend/jvp";
 import * as linearizeModule from "./frontend/linearize";
 import * as vmapModule from "./frontend/vmap";
@@ -20,6 +20,7 @@ import "./polyfills";
 export {
   init,
   Array,
+  ClosedJaxpr,
   defaultDevice,
   type Device,
   devices,
@@ -97,8 +98,7 @@ export const makeJaxpr = jaxprModule.makeJaxpr as unknown as <
 >(
   f: F,
 ) => (...args: Parameters<F>) => {
-  jaxpr: jaxprModule.Jaxpr;
-  consts: Array[];
+  jaxpr: ClosedJaxpr;
   treedef: JsTreeDef;
 };
 
