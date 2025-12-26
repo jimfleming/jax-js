@@ -1,4 +1,3 @@
-import { Trace } from "../../../src/frontend/core";
 import { GradientTransformation, identity, ScalarOrSchedule } from "./base";
 import { chain } from "./combine";
 import {
@@ -9,7 +8,6 @@ import {
   scaleByLearningRate,
   trace,
 } from "./transform";
-import { numpy as np } from "@jax-js/jax";
 
 export type SgdOptions = {
   momentum?: number | null;
@@ -19,16 +17,13 @@ export type SgdOptions = {
 /** Stochastic gradient descent. */
 export function sgd(
   learningRate: ScalarOrSchedule,
-  opts: SgdOptions = {}
+  opts: SgdOptions = {},
 ): GradientTransformation {
   const { momentum = null, nesterov = false } = opts;
 
   let opt: GradientTransformation;
   if (momentum !== null) {
-    opt = trace({
-      decay: momentum,
-      nesterov,
-    });
+    opt = trace({ decay: momentum, nesterov });
   } else {
     opt = identity();
   }
@@ -49,7 +44,7 @@ export type AdamWOptions = ScaleByAdamOptions & AddDecayedWeightsOptions;
 /** Adam with weight decay regularization. */
 export function adamw(
   learningRate: ScalarOrSchedule,
-  opts: AdamWOptions = {}
+  opts: AdamWOptions = {},
 ): GradientTransformation {
   const {
     b1,
@@ -72,6 +67,6 @@ export function adamw(
       ...adamOpts,
     }),
     addDecayedWeights({ weightDecay, mask }),
-    scaleByLearningRate(learningRate)
+    scaleByLearningRate(learningRate),
   );
 }

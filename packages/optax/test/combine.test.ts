@@ -13,7 +13,7 @@ test("chain function combines transformations", () => {
   const [newUpdates, _newState] = combined.update(
     updates.ref,
     state,
-    params.ref
+    params.ref,
   );
 
   // 2.0 * 0.5 = 1.0, so updates should be unchanged

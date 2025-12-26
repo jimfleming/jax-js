@@ -120,7 +120,7 @@ export type AddDecayedWeightsOptions = {
   mask?: JsTree<np.Array> | MaskFn | null;
 };
 
-/** Adds parameter scaled by weight decay (L2 regularization). */
+/** Add parameter scaled by weight decay. */
 export function addDecayedWeights({
   weightDecay = 0.0,
   mask = null,
@@ -154,7 +154,6 @@ export function addDecayedWeights({
         newState = state;
       }
 
-      // If weight decay is zero, skip the update
       if (currentWeightDecay === 0.0) {
         tree.dispose(params);
         return [updates, newState];
@@ -162,32 +161,27 @@ export function addDecayedWeights({
 
       let decayedParams: JsTree<np.Array>;
       if (mask) {
-        // Resolve mask - if it's a function, call it with updates
-        const maskTree = typeof mask === "function"
-          ? mask(tree.ref(updates))
-          : mask;
+        const maskTree =
+          typeof mask === "function" ? mask(tree.ref(updates)) : mask;
 
-        // Apply mask: multiply params by mask, then by weight decay
         decayedParams = tree.map(
           (p: np.Array, m: np.Array) => p.mul(m).mul(currentWeightDecay),
           tree.ref(params),
-          maskTree
+          maskTree,
         );
       } else {
-        // Apply weight decay to all parameters
         decayedParams = tree.map(
           (p: np.Array) => p.mul(currentWeightDecay),
-          tree.ref(params)
+          tree.ref(params),
         );
       }
 
       tree.dispose(params);
 
-      // Add decayed weights to gradients: g + weight_decay * p
       updates = tree.map(
         (g: np.Array, d: np.Array) => g.add(d),
         updates,
-        decayedParams
+        decayedParams,
       ) as typeof updates;
 
       return [updates, newState];
@@ -218,7 +212,7 @@ export function trace({
       const newTrace = tree.map(
         (g: np.Array, t: np.Array) => g.add(t.mul(decay)),
         tree.ref(updates),
-        prevTrace
+        prevTrace,
       );
 
       let finalUpdates: typeof updates;
@@ -227,7 +221,7 @@ export function trace({
         finalUpdates = tree.map(
           (g: np.Array, t: np.Array) => g.add(t.mul(decay)),
           updates,
-          tree.ref(newTrace)
+          tree.ref(newTrace),
         ) as typeof updates;
       } else {
         // Standard momentum: updates = new_trace

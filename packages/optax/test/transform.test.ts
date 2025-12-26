@@ -17,7 +17,7 @@ test("scaleByLearningRate function", () => {
   const [newUpdates, _newState] = transform.update(
     updates.ref,
     state,
-    params.ref
+    params.ref,
   );
 
   // Should scale by -0.1 (negative learning rate)
@@ -34,7 +34,7 @@ test("addDecayedWeights function with scalar", () => {
   const [newUpdates, _newState] = transform.update(
     updates.ref,
     state,
-    params.ref
+    params.ref,
   );
 
   // Should add weight decay: [0.1 + 0.01*1, 0.2 + 0.01*2, 0.3 + 0.01*3]
@@ -51,19 +51,11 @@ test("addDecayedWeights function with schedule", () => {
   let state = transform.init(params.ref);
 
   // First update (step 0): weight_decay = 0.01
-  let [newUpdates, newState] = transform.update(
-    updates.ref,
-    state,
-    params.ref
-  );
+  let [newUpdates, newState] = transform.update(updates.ref, state, params.ref);
   expect(newUpdates).toBeAllclose([0.11, 0.22, 0.33]);
 
   // Second update (step 1): weight_decay = 0.02
-  [newUpdates, newState] = transform.update(
-    updates.ref,
-    newState,
-    params.ref
-  );
+  [newUpdates, newState] = transform.update(updates.ref, newState, params.ref);
   expect(newUpdates).toBeAllclose([0.12, 0.24, 0.36]);
 });
 
@@ -79,7 +71,7 @@ test("addDecayedWeights function with mask", () => {
   const [newUpdates, _newState] = transform.update(
     updates.ref,
     state,
-    params.ref
+    params.ref,
   );
 
   // Should add weight decay only where mask = 1: [0.1 + 0.01*1, 0.2 + 0, 0.3 + 0.01*3]
@@ -107,19 +99,11 @@ test("scaleBySchedule function with dynamic learning rate", () => {
   let state = transform.init(params.ref);
 
   // First update (step 0)
-  let [newUpdates, newState] = transform.update(
-    updates.ref,
-    state,
-    params.ref
-  );
+  let [newUpdates, newState] = transform.update(updates.ref, state, params.ref);
   expect(newUpdates).toBeAllclose([0.1, 0.2, 0.3]); // 1.0 * updates
 
   // Second update (step 1)
-  [newUpdates, newState] = transform.update(
-    updates.ref,
-    newState,
-    params.ref
-  );
+  [newUpdates, newState] = transform.update(updates.ref, newState, params.ref);
   expect(newUpdates).toBeAllclose([0.09, 0.18, 0.27]); // 0.9 * updates
 });
 
