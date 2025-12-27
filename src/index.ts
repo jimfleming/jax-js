@@ -88,9 +88,7 @@ export const jacfwd = vmapModule.jacfwd as unknown as {
   ) => [ReturnType<F>[0], ReturnType<F>[1]];
   <F extends (x: Array) => Array>(
     f: F,
-  ): (
-    ...args: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => ReturnType<F>;
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
 };
 
 /**
@@ -144,7 +142,9 @@ export const linearize = linearizeModule.linearize as unknown as {
     ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
   ): [
     [ReturnType<F>[0], ReturnType<F>[1]],
-    (...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>[0],
+    (
+      ...tangents: MapJsTree<Parameters<F>, Array, ArrayLike>
+    ) => ReturnType<F>[0],
   ];
   <F extends (...args: any[]) => JsTree<Array>>(
     f: F,
@@ -188,7 +188,9 @@ export const vjp = linearizeModule.vjp as unknown as {
  * first argument.
  */
 type GradFn = {
-  <F extends (...args: any[]) => JsTree<Array>>(f: F): (
+  <F extends (...args: any[]) => JsTree<Array>>(
+    f: F,
+  ): (
     ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
   ) => MapJsTree<Parameters<F>[0], ArrayLike, Array>;
   <F extends (...args: any[]) => JsTree<Array>>(
@@ -231,9 +233,7 @@ export const jacrev = linearizeModule.jacrev as unknown as {
   ) => [ReturnType<F>[0], ReturnType<F>[1]];
   <F extends (x: Array) => Array>(
     f: F,
-  ): (
-    ...args: MapJsTree<Parameters<F>, Array, ArrayLike>
-  ) => ReturnType<F>;
+  ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
 };
 
 /**

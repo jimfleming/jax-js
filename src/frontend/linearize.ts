@@ -160,7 +160,9 @@ type GradOptsBase = {
 };
 
 /** Create options for gradient/differentiation functions. */
-export function gradOpts(options: { hasAux: true }): GradOptsBase & { hasAux: true };
+export function gradOpts(options: {
+  hasAux: true;
+}): GradOptsBase & { hasAux: true };
 export function gradOpts(options?: { hasAux?: boolean }): GradOptsBase;
 export function gradOpts(options?: { hasAux?: boolean }): GradOptsBase {
   return { ...options, [GRAD_OPTS]: true };
@@ -182,7 +184,9 @@ export function linearize(
 export function linearize(
   f: (...primals: any[]) => any,
   ...args: any[]
-): [any, OwnedFunction<(...tangents: any[]) => any>] | [[any, any], OwnedFunction<(...tangents: any[]) => any>] {
+):
+  | [any, OwnedFunction<(...tangents: any[]) => any>]
+  | [[any, any], OwnedFunction<(...tangents: any[]) => any>] {
   // Parse args: first element after f may be opts object
   let primalsIn: any[];
   let opts: LinearizeOpts | undefined;
@@ -1068,12 +1072,13 @@ export type GradOpts = GradOptsBase;
 // Function overloads for grad to discriminate return types
 export function grad(
   f: (...primals: any) => Tracer,
-  opts: GradOpts & { hasAux: true }
+  opts: GradOpts & { hasAux: true },
 ): (...x: any) => [any, any];
+export function grad(f: (...primals: any) => Tracer): (...x: any) => any;
 export function grad(
-  f: (...primals: any) => Tracer
-): (...x: any) => any;
-export function grad(f: (...primals: any) => Tracer, opts?: GradOpts): (...x: any) => any {
+  f: (...primals: any) => Tracer,
+  opts?: GradOpts,
+): (...x: any) => any {
   // Use explicit type narrowing to avoid overload resolution issues
   if (opts?.hasAux) {
     const valueAndGradFn = valueAndGrad(f, opts as GradOpts & { hasAux: true });
@@ -1094,12 +1099,15 @@ export function grad(f: (...primals: any) => Tracer, opts?: GradOpts): (...x: an
 // Function overloads for valueAndGrad to discriminate return types
 export function valueAndGrad(
   f: (...primals: any) => Tracer,
-  opts: GradOpts & { hasAux: true }
+  opts: GradOpts & { hasAux: true },
 ): (...x: any) => [[any, any], any];
 export function valueAndGrad(
-  f: (...primals: any) => Tracer
+  f: (...primals: any) => Tracer,
 ): (...x: any) => [any, any];
-export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts): (...x: any) => any {
+export function valueAndGrad(
+  f: (...primals: any) => Tracer,
+  opts?: GradOpts,
+): (...x: any) => any {
   return (...x: any) => {
     if (x.length === 0) {
       throw new Error("grad requires at least one argument to differentiate");
@@ -1114,7 +1122,7 @@ export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts): (
         f,
         gradOpts({ hasAux: true }),
         x[0],
-        ...x.slice(1).map(stopGradient)
+        ...x.slice(1).map(stopGradient),
       ) as [any, OwnedFunction<(...cotangents: any) => any>, any];
       [y, fVjp, aux] = vjpResult;
     } else {
@@ -1144,7 +1152,7 @@ export type JacrevOpts = GradOptsBase;
 // Function overloads for jacrev to discriminate return types
 export function jacrev(
   f: any,
-  opts: JacrevOpts & { hasAux: true }
+  opts: JacrevOpts & { hasAux: true },
 ): (x: Tracer) => [any, any];
 export function jacrev(f: any): (x: Tracer) => any;
 // See also: jacfwd()
