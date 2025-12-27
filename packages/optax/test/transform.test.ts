@@ -8,8 +8,8 @@ import {
 import { expect, test } from "vitest";
 
 test("scaleByLearningRate function", () => {
-  let params = np.array([1.0, 2.0, 3.0]);
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const params = np.array([1.0, 2.0, 3.0]);
+  const updates = np.array([0.1, 0.2, 0.3]);
 
   const transform = scaleByLearningRate(0.1);
   const state = transform.init(params.ref);
@@ -25,8 +25,8 @@ test("scaleByLearningRate function", () => {
 });
 
 test("addDecayedWeights function with scalar", () => {
-  let params = np.array([1.0, 2.0, 3.0]);
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const params = np.array([1.0, 2.0, 3.0]);
+  const updates = np.array([0.1, 0.2, 0.3]);
 
   const transform = addDecayedWeights({ weightDecay: 0.01 });
   const state = transform.init(params.ref);
@@ -42,13 +42,13 @@ test("addDecayedWeights function with scalar", () => {
 });
 
 test("addDecayedWeights function with schedule", () => {
-  let params = np.array([1.0, 2.0, 3.0]);
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const params = np.array([1.0, 2.0, 3.0]);
+  const updates = np.array([0.1, 0.2, 0.3]);
 
   // Weight decay schedule that increases: 0.01, 0.02, 0.03, ...
   const weightDecaySchedule = (step: number) => 0.01 * (step + 1);
   const transform = addDecayedWeights({ weightDecay: weightDecaySchedule });
-  let state = transform.init(params.ref);
+  const state = transform.init(params.ref);
 
   // First update (step 0): weight_decay = 0.01
   let [newUpdates, newState] = transform.update(updates.ref, state, params.ref);
@@ -60,10 +60,10 @@ test("addDecayedWeights function with schedule", () => {
 });
 
 test("addDecayedWeights function with mask", () => {
-  let params = np.array([1.0, 2.0, 3.0]);
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const params = np.array([1.0, 2.0, 3.0]);
+  const updates = np.array([0.1, 0.2, 0.3]);
   // Mask: apply weight decay to first and third params only
-  let mask = np.array([1.0, 0.0, 1.0]);
+  const mask = np.array([1.0, 0.0, 1.0]);
 
   const transform = addDecayedWeights({ weightDecay: 0.01, mask });
   const state = transform.init(params.ref);
@@ -79,7 +79,7 @@ test("addDecayedWeights function with mask", () => {
 });
 
 test("addDecayedWeights throws error when params is undefined", () => {
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const updates = np.array([0.1, 0.2, 0.3]);
 
   const transform = addDecayedWeights({ weightDecay: 0.01 });
   const state = transform.init(np.array([1.0, 2.0, 3.0]));
@@ -90,13 +90,13 @@ test("addDecayedWeights throws error when params is undefined", () => {
 });
 
 test("scaleBySchedule function with dynamic learning rate", () => {
-  let params = np.array([1.0, 2.0, 3.0]);
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const params = np.array([1.0, 2.0, 3.0]);
+  const updates = np.array([0.1, 0.2, 0.3]);
 
   // Learning rate starts at 1.0 and decreases by 10% each step
   const schedule = (step: number) => Math.pow(0.9, step);
   const transform = scaleBySchedule(schedule);
-  let state = transform.init(params.ref);
+  const state = transform.init(params.ref);
 
   // First update (step 0)
   let [newUpdates, newState] = transform.update(updates.ref, state, params.ref);
@@ -108,11 +108,11 @@ test("scaleBySchedule function with dynamic learning rate", () => {
 });
 
 test("trace transformation", () => {
-  let params = np.array([1.0, 2.0, 3.0]);
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const params = np.array([1.0, 2.0, 3.0]);
+  const updates = np.array([0.1, 0.2, 0.3]);
 
   const transform = trace({ decay: 0.9 });
-  let state = transform.init(params.ref);
+  const state = transform.init(params.ref);
 
   // First update: trace should be equal to updates
   let [newUpdates, newState] = transform.update(updates.ref, state, params.ref);
@@ -124,11 +124,11 @@ test("trace transformation", () => {
 });
 
 test("trace transformation with nesterov", () => {
-  let params = np.array([1.0, 2.0, 3.0]);
-  let updates = np.array([0.1, 0.2, 0.3]);
+  const params = np.array([1.0, 2.0, 3.0]);
+  const updates = np.array([0.1, 0.2, 0.3]);
 
   const transform = trace({ decay: 0.9, nesterov: true });
-  let state = transform.init(params.ref);
+  const state = transform.init(params.ref);
 
   // First update with nesterov
   let [newUpdates, newState] = transform.update(updates.ref, state, params.ref);

@@ -206,7 +206,7 @@ export function trace({
     },
     update(updates, state, params) {
       tree.dispose(params);
-      let { trace: prevTrace } = state as { trace: JsTree<np.Array> };
+      const { trace: prevTrace } = state as { trace: JsTree<np.Array> };
 
       // new_trace = g + decay * t
       const newTrace = tree.map(

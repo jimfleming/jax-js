@@ -1,5 +1,5 @@
 import { grad, JsTree, numpy as np, tree } from "@jax-js/jax";
-import { adamw, applyUpdates, sgd, squaredError } from "@jax-js/optax";
+import { adamw, applyUpdates, squaredError } from "@jax-js/optax";
 import { expect, test } from "vitest";
 
 test("adamw optimizer", () => {
