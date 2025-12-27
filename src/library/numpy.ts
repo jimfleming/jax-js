@@ -366,8 +366,7 @@ export function cumsum(a: ArrayLike, axis?: number): Array {
   return moveaxis(tril(a).sum(-1), -1, axis);
 }
 
-/** @function Alternative name for `jax.numpy.cumsum()`. */
-export const cumulativeSum = cumsum;
+export { cumsum as cumulativeSum };
 
 /** Reverse the elements in an array along the given axes. */
 export function flip(x: ArrayLike, axis: core.Axis = null): Array {
@@ -539,8 +538,7 @@ export function fliplr(x: ArrayLike): Array {
   return flip(x, 1);
 }
 
-/** @function Alternative name for `numpy.transpose()`. */
-export const permuteDims = transpose;
+export { transpose as permuteDims };
 
 /** Return a 1-D flattened array containing the elements of the input. */
 export function ravel(a: ArrayLike): Array {
@@ -1195,8 +1193,7 @@ export function absolute(x: ArrayLike): Array {
   return where(less(x.ref, 0), x.ref.mul(-1), x);
 }
 
-/** @function Alias of `jax.numpy.absolute()`. */
-export const abs = absolute;
+export { absolute as abs };
 
 /** Return an element-wise indication of sign of the input. */
 export function sign(x: ArrayLike): Array {
@@ -1295,12 +1292,7 @@ export const atan2 = jit(function atan2(y: Array, x: Array) {
   return atan(numer.div(denom)).mul(2);
 });
 
-/** @function Alias of `jax.numpy.acos()`. */
-export const arccos = acos;
-/** @function Alias of `jax.numpy.atan()`. */
-export const arctan = atan;
-/** @function Alias of `jax.numpy.atan2()`. */
-export const arctan2 = atan2;
+export { asin as arcsin, acos as arccos, atan as arctan, atan2 as arctan2 };
 
 /** Element-wise subtraction, with broadcasting. */
 export function subtract(x: ArrayLike, y: ArrayLike): Array {
@@ -1320,6 +1312,8 @@ export function trueDivide(x: ArrayLike, y: ArrayLike): Array {
   return x.div(y);
 }
 
+export { trueDivide as divide };
+
 /**
  * @function
  * Calculate element-wise floating-point modulo operation.
@@ -1338,8 +1332,6 @@ export const remainder = jit(function remainder(x: Array, y: Array): Array {
   return core.mod(core.mod(x, y.ref).add(y.ref), y) as Array;
 });
 
-/** @function Alias of `jax.numpy.trueDivide()`. */
-export const divide = trueDivide;
 
 /** Round input to the nearest integer towards zero. */
 export function trunc(x: ArrayLike): Array {
@@ -1364,13 +1356,13 @@ export function ldexp(x1: ArrayLike, x2: ArrayLike): Array {
  */
 export function frexp(x: ArrayLike): [Array, Array] {
   x = fudgeArray(x);
-  const absx = abs(x.ref);
+  const absx = absolute(x.ref);
   const exponent = where(
     equal(x.ref, 0),
     0,
     floor(log2(absx)).add(1).astype(DType.Int32),
   );
-  const mantissa = divide(x, exp2(exponent.ref.astype(x.dtype)));
+  const mantissa = x.div(exp2(exponent.ref.astype(x.dtype)));
   return [mantissa, exponent];
 }
 
@@ -1433,11 +1425,14 @@ export const power = jit(function power(x1: Array, x2: Array) {
     where(x1.ref.less(0), -1, 1),
     1,
   );
-  return where(shouldBeNaN, nan, exp(log(abs(x1)).mul(x2)).mul(resultSign));
+  return where(
+    shouldBeNaN,
+    nan,
+    exp(log(absolute(x1)).mul(x2)).mul(resultSign),
+  );
 });
 
-/** @function Alias of `jax.numpy.power()`. */
-export const pow = power;
+export { power as pow };
 
 /** @function Calculate the element-wise cube root of the input array. */
 export const cbrt = jit(function cbrt(x: Array) {
@@ -1514,12 +1509,7 @@ export const arctanh = jit(function arctanh(x: Array) {
   return log(add(1, x.ref).div(subtract(1, x))).mul(0.5);
 });
 
-/** @function Alias of `jax.numpy.arcsinh()`. */
-export const asinh = arcsinh;
-/** @function Alias of `jax.numpy.arccosh()`. */
-export const acosh = arccosh;
-/** @function Alias of `jax.numpy.arctanh()`. */
-export const atanh = arctanh;
+export { arcsinh as asinh, arccosh as acosh, arctanh as atanh };
 
 /**
  * Compute the variance of an array.
