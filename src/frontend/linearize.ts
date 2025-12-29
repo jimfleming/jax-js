@@ -43,6 +43,7 @@ import {
   TracerValue,
   transpose,
   TreeMismatchError,
+  triangularSolve,
   UseAfterFreeError,
   where,
 } from "./core";
@@ -59,7 +60,7 @@ import {
   Var,
 } from "./jaxpr";
 import { jvp } from "./jvp";
-import { vmap } from "./vmap";
+import { moveaxis, vmap } from "./vmap";
 
 /** Array value that can either be known or unknown. */
 class PartialVal {
@@ -847,6 +848,19 @@ const transposeRules: Partial<{ [P in Primitive]: TransposeRule<P> }> = {
       ([s, _e], i) => [s, s + x.aval.shape[i]] as [number, number],
     );
     return [shrink(ct, slice)];
+  },
+  [Primitive.TriangularSolve]([ct], [a, b], { unitDiagonal }) {
+    if (a instanceof UndefPrimal || !(b instanceof UndefPrimal))
+      throw new NonlinearError(Primitive.TriangularSolve);
+    // The adjoint of solving a @ x.T = b.T for x, when differentiating w.r.t. b:
+    //   If forward is: x.T = a^{-1} @ b.T
+    //   Then adjoint is: ct_b.T = a^{-T} @ ct_x.T, so we just transpose A
+    // Note: The primitive always operates on upper triangular a, so a^T is lower.
+    const ctB = triangularSolve(moveaxis(a, -2, -1), ct, {
+      lower: true,
+      unitDiagonal,
+    });
+    return [null, ctB];
   },
   [Primitive.Jit](cts, args, { name, jaxpr }) {
     // We need this one because the jvp() rule for Jit generates a Jit

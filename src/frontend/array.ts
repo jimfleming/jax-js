@@ -35,6 +35,7 @@ import {
   AbstractValue,
   CompareOp,
   getAval,
+  ndim,
   newMain,
   Primitive,
   PrimitiveParams,
@@ -44,6 +45,7 @@ import {
   Tracer,
   TracerValue,
   UseAfterFreeError,
+  where,
 } from "./core";
 import { jitCompile } from "./jit";
 
@@ -1041,6 +1043,28 @@ export class Array extends Tracer {
         });
         return Array.#routine(routine, [x], [false]);
       },
+      [Primitive.TriangularSolve]([a, b], { unitDiagonal }) {
+        const routine = new Routine(
+          Routines.TriangularSolve,
+          {
+            inputShapes: [a.aval.shape, b.aval.shape],
+            inputDtypes: [a.aval.dtype, b.aval.dtype],
+            outputShapes: [b.aval.shape],
+            outputDtypes: [b.aval.dtype],
+          },
+          { unitDiagonal },
+        );
+        return Array.#routine(routine, [a, b], [a.#weakType && b.#weakType]);
+      },
+      [Primitive.Cholesky]([a]) {
+        const routine = new Routine(Routines.Cholesky, {
+          inputShapes: [a.aval.shape],
+          inputDtypes: [a.aval.dtype],
+          outputShapes: [a.aval.shape],
+          outputDtypes: [a.aval.dtype],
+        });
+        return Array.#routine(routine, [a], [a.#weakType]);
+      },
       [Primitive.Jit](args, { jaxpr }) {
         if (jaxpr.inBinders.length !== args.length) {
           throw new Error(
@@ -1462,6 +1486,63 @@ export function arange(
     backend: getBackend(device),
     committed: device != undefined,
   });
+}
+
+/**
+ * Return an array with ones on and below the diagonal and zeros elsewhere.
+ *
+ * If `k` is provided, it specifies the sub-diagonal on and below which the
+ * array is filled with ones. `k=0` is the main diagonal, `k<0` is below it, and
+ * `k>0` is above it.
+ */
+export function tri(
+  n: number,
+  m?: number,
+  k: number = 0,
+  { dtype, device }: DTypeAndDevice = {},
+): Array {
+  m ??= n;
+  dtype ??= DType.Float32;
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`tri: n must be a non-negative integer, got ${n}`);
+  }
+  if (!Number.isInteger(m) || m < 0) {
+    throw new Error(`tri: m must be a non-negative integer, got ${m}`);
+  }
+  if (!Number.isInteger(k)) {
+    throw new Error(`tri: k must be an integer, got ${k}`);
+  }
+  const rows = arange(k, n + k, 1, { dtype: DType.Int32, device });
+  const cols = arange(0, m, 1, { dtype: DType.Int32, device });
+  return rows.reshape([n, 1]).greaterEqual(cols).astype(dtype);
+}
+
+/** Return the lower triangle of an array. Must be of dimension >= 2. */
+export function tril(a: ArrayLike, k: number = 0): Array {
+  if (ndim(a) < 2) {
+    throw new Error(`tril: input array must be at least 2D, got ${ndim(a)}D`);
+  }
+  a = fudgeArray(a);
+  const [n, m] = a.shape.slice(-2);
+  return where(
+    tri(n, m, k, { dtype: DType.Bool }),
+    a.ref,
+    zerosLike(a),
+  ) as Array;
+}
+
+/** Return the upper triangle of an array. Must be of dimension >= 2. */
+export function triu(a: ArrayLike, k: number = 0): Array {
+  if (ndim(a) < 2) {
+    throw new Error(`tril: input array must be at least 2D, got ${ndim(a)}D`);
+  }
+  a = fudgeArray(a);
+  const [n, m] = a.shape.slice(-2);
+  return where(
+    tri(n, m, k - 1, { dtype: DType.Bool }),
+    zerosLike(a.ref),
+    a,
+  ) as Array;
 }
 
 /**

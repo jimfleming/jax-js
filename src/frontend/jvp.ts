@@ -5,7 +5,7 @@ import {
   unflatten as treeUnflatten,
 } from "../tree";
 import { unzip2, zip } from "../utils";
-import { pureArray, zerosLike } from "./array";
+import { pureArray, triu, zerosLike } from "./array";
 import {
   AbstractValue,
   argsort,
@@ -16,7 +16,9 @@ import {
   bitcast,
   broadcast,
   cast,
+  cholesky,
   cos,
+  dot,
   erf,
   erfc,
   exp,
@@ -42,9 +44,11 @@ import {
   Tracer,
   TracerValue,
   TreeMismatchError,
+  triangularSolve,
   where,
 } from "./core";
 import { ClosedJaxpr, Jaxpr, jaxprAsFun, makeJaxpr } from "./jaxpr";
+import { moveaxis } from "./vmap";
 
 class JVPTracer extends Tracer {
   constructor(
@@ -134,6 +138,14 @@ function zeroTangentsJvp<P extends Primitive>(primitive: P): JvpRule<P> {
     const ys = bind(primitive, primals, params);
     return [ys, ys.map((y) => zerosLike(y.ref))];
   };
+}
+
+/** Compute matmul(a, b.T), batched to last two axes. */
+function batchMatmulTransposed(a: Tracer, b: Tracer): Tracer {
+  return dot(
+    a.reshape(a.shape.toSpliced(-1, 0, 1)),
+    b.reshape(b.shape.toSpliced(-2, 0, 1)),
+  );
 }
 
 const jvpRules: { [P in Primitive]: JvpRule<P> } = {
@@ -283,6 +295,32 @@ const jvpRules: { [P in Primitive]: JvpRule<P> } = {
     return [[gather(x, [idx.ref], [-1], -1)], [gather(dx, [idx], [-1], -1)]];
   },
   [Primitive.Argsort]: zeroTangentsJvp(Primitive.Argsort),
+  [Primitive.TriangularSolve]([a, b], [da, db], { unitDiagonal }) {
+    // a @ x.T = b.T  =>  da @ x.T + a @ dx.T = db.T
+    // So: a @ dx.T = db.T - da @ x.T
+    // Therefore: dx.T = triangular_solve(a, db.T - da @ x.T)
+    const x = triangularSolve(a.ref, b, { unitDiagonal });
+    const daxT = batchMatmulTransposed(da, x.ref);
+    const rhs = moveaxis(db, -2, -1).sub(daxT);
+    const dx = triangularSolve(a, moveaxis(rhs, -2, -1), { unitDiagonal });
+    return [[x], [dx]];
+  },
+  [Primitive.Cholesky]([a], [da]) {
+    // If L = cholesky(A), so that A = L L^T, then
+    // dL = L @ tril(S - 0.5 * diag(S)),
+    //   where S = L^{-1} @ dA @ L^{-T}
+    const L = cholesky(a.ref);
+    da = da.ref.add(moveaxis(da, -1, -2)).mul(0.5); // Symmetrize dA for grad
+    const W = triangularSolve(L.ref, da, { lower: true }); // dA.T @ L^{-T}
+    const S = triangularSolve(L.ref, moveaxis(W, -1, -2), { lower: true });
+    const dL = batchMatmulTransposed(
+      L.ref,
+      triu(S.ref as any, 1)
+        .add(triu(S as any))
+        .mul(0.5),
+    );
+    return [[L], [dL]];
+  },
   [Primitive.Jit](primals, tangents, { name, jaxpr }) {
     const newJaxpr = jvpJaxpr(jaxpr);
     const outs = bind(

@@ -84,6 +84,8 @@ export enum Primitive {
   // Routines (custom lowering)
   Sort = "sort", // sort(x, axis=-1)
   Argsort = "argsort", // argsort(x, axis=-1)
+  TriangularSolve = "triangular_solve", // upper triangular, U x = b
+  Cholesky = "cholesky", // returns lower triangular, L L^T
 
   // JIT compilation
   Jit = "jit",
@@ -110,6 +112,7 @@ interface PrimitiveParamsImpl extends Record<Primitive, Record<string, any>> {
   [Primitive.Shrink]: { slice: Pair[] };
   [Primitive.Pad]: { width: Pair[] };
   [Primitive.Jit]: { name: string; jaxpr: Jaxpr; numConsts: number };
+  [Primitive.TriangularSolve]: { unitDiagonal: boolean };
 }
 
 /** Type of parameters taken by each primitive. */
@@ -403,6 +406,30 @@ export function pad(x: TracerValue, width: number | Pair | Pair[]) {
     throw new Error(`Invalid pad(): expected ${nd} axes, got ${width.length}`);
   }
   return bind1(Primitive.Pad, [x], { width });
+}
+
+export function triangularSolve(
+  a: TracerValue,
+  b: TracerValue,
+  {
+    lower = false,
+    unitDiagonal = false,
+  }: { lower?: boolean; unitDiagonal?: boolean } = {},
+) {
+  // Solve a triangular linear system `a @ x.T = b.T`, transposed for speed.
+  if (lower) {
+    // Convert lower-triangular solve into upper-triangular solve by
+    // flipping the matrices.
+    a = flip(a, [-2, -1]);
+    b = flip(b, [-1]);
+  }
+  let x = bind1(Primitive.TriangularSolve, [a, b], { unitDiagonal });
+  if (lower) x = flip(x, [-1]);
+  return x;
+}
+
+export function cholesky(x: TracerValue) {
+  return bind1(Primitive.Cholesky, [x]);
 }
 
 export function sort(x: TracerValue) {
@@ -1015,6 +1042,10 @@ export class ShapedArray implements AbstractValue {
 
   static fromAval(aval: AbstractValue) {
     return new ShapedArray(aval.shape, aval.dtype, aval.weakType);
+  }
+
+  static scalarLike(aval: AbstractValue) {
+    return new ShapedArray([], aval.dtype, aval.weakType);
   }
 
   get ndim() {
