@@ -7,4 +7,8 @@ export {
   setToZero,
 } from "./base";
 export { l2Loss, squaredError } from "./losses";
-export { scaleByAdam, type ScaleByAdamOptions } from "./transform";
+export {
+  clipByGlobalNorm,
+  scaleByAdam,
+  type ScaleByAdamOptions,
+} from "./transform";

@@ -51,3 +51,59 @@ export function treeBiasCorrection(
   const correction = 1 / (1 - Math.pow(decay, count.item()));
   return tree.map((t: np.Array) => t.mul(correction), moments);
 }
+
+/** Sum all elements across all arrays in a pytree. */
+export function treeSum(tr: JsTree<np.Array>): np.Array {
+  const [leaves] = tree.flatten(tr);
+  let total: np.Array | null = null;
+  for (const leaf of leaves) {
+    const leafSum = np.sum(leaf);
+    if (total === null) {
+      total = leafSum;
+    } else {
+      total = np.add(total, leafSum);
+    }
+  }
+  return total ?? np.array(0.0);
+}
+
+/** Max of all elements across all arrays in a pytree. */
+export function treeMax(tr: JsTree<np.Array>): np.Array {
+  const [leaves] = tree.flatten(tr);
+  let maxVal: np.Array | null = null;
+  for (const leaf of leaves) {
+    const leafMax = np.max(leaf);
+    if (maxVal === null) {
+      maxVal = leafMax;
+    } else {
+      maxVal = np.maximum(maxVal, leafMax);
+    }
+  }
+  return maxVal ?? np.array(-Infinity);
+}
+
+export type NormOrd = 1 | 2 | "inf" | "infinity" | number;
+
+/** Compute the vector norm of the given ord of a pytree. */
+export function treeNorm(
+  tr: JsTree<np.Array>,
+  ord: NormOrd = 2,
+  squared = false,
+): np.Array {
+  if (ord === 2) {
+    const squaredTree = tree.map((x: np.Array) => np.square(x), tr);
+    const sqNorm = treeSum(squaredTree);
+    return squared ? sqNorm : np.sqrt(sqNorm);
+  } else if (ord === 1) {
+    const absTree = tree.map((x: np.Array) => np.abs(x), tr);
+    const result = treeSum(absTree);
+    return squared ? np.square(result) : result;
+  } else if (ord === "inf" || ord === "infinity" || ord === Infinity) {
+    const absTree = tree.map((x: np.Array) => np.abs(x), tr);
+    const result = treeMax(absTree);
+    return squared ? np.square(result) : result;
+  } else {
+    tree.dispose(tr);
+    throw new Error(`Unsupported ord: ${ord}`);
+  }
+}
