@@ -236,11 +236,7 @@ export const jacrev = linearizeModule.jacrev as unknown as {
   ): (...args: MapJsTree<Parameters<F>, Array, ArrayLike>) => ReturnType<F>;
 };
 
-/**
- * @function
- * Compute the Jacobian with reverse-mode AD. Alias for `jacrev()`.
- */
-export const jacobian = jacrev;
+export { jacrev as jacobian };
 
 /**
  * Wait until all `Array` leaves are ready by calling `Array.blockUntilReady()`.
