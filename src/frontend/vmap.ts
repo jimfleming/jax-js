@@ -1,5 +1,5 @@
 import { assertNonNull, checkAxis, range, rep, unzip2, zip } from "../utils";
-import { arange, eye, pureArray, zerosLike } from "./array";
+import { arange, eye, pureArray } from "./array";
 import {
   AbstractValue,
   add,
@@ -54,9 +54,8 @@ import {
   flatten as treeFlatten,
   unflatten as treeUnflatten,
 } from "../tree";
-import { ClosedJaxpr, Jaxpr, jaxprAsFun, makeJaxpr } from "./jaxpr";
-import { jvp } from "./jvp";
-import { gradOpts } from "./linearize";
+import { ClosedJaxpr, Jaxpr, jaxprAsFun, makeJaxpr, OwnedFunction } from "./jaxpr";
+import { gradOpts, linearize } from "./linearize";
 
 function mappedAval(batchDim: number, aval: AbstractValue) {
   const shape = [...aval.shape];
@@ -516,24 +515,22 @@ export function jacfwd(f: any, opts?: JacfwdOpts) {
     }
     const [size] = x.shape;
 
-    if (opts?.hasAux) {
-      const [[primals, aux], tangents] = jvp(
-        f,
-        [x.ref],
-        [zerosLike(x.ref)],
-        gradOpts({ hasAux: true }),
-      ) as [[any, any], any];
-      primals.dispose();
-      tangents.dispose();
-      const pushfwd = (v: Tracer) =>
-        jvp(f, [x], [v], gradOpts({ hasAux: true }))[1];
-      const jacobian = vmap(pushfwd, [0])(
-        eye(size, undefined, { dtype: x.dtype }),
-      );
-      return [jacobian, aux];
-    }
+    // Hoist linearize outside vmap for efficiency
+    const linResult = opts?.hasAux
+      ? linearize(f, gradOpts({ hasAux: true }), x.ref)
+      : linearize(f, x.ref);
 
-    const pushfwd = (v: Tracer) => jvp(f, [x], [v])[1];
-    return vmap(pushfwd, [0])(eye(size, undefined, { dtype: x.dtype }));
+    const [y, lin] = linResult as [any, OwnedFunction<any>];
+    const aux = opts?.hasAux ? (y as [any, any])[1] : undefined;
+    const primal = opts?.hasAux ? (y as [any, any])[0] : y;
+    primal.dispose();
+
+    const pushfwd = (v: Tracer) => lin(v);
+    const jacobian = vmap(pushfwd, [0])(
+      eye(size, undefined, { dtype: x.dtype }),
+    );
+    lin.dispose();
+
+    return opts?.hasAux ? [jacobian, aux] : jacobian;
   };
 }
