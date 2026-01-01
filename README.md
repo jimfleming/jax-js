@@ -3,7 +3,8 @@
 <p align="center"><strong>
   <a href="https://jax-js.com">Website</a> |
   <a href="https://jax-js.com/docs/">API Reference</a> |
-  <a href="./FEATURES.md">Compatibility Table</a>
+  <a href="./FEATURES.md">Compatibility Table</a> |
+  <a href="https://discord.gg/BW6YsCd4Tf">Discord</a>
 </strong></p>
 
 **jax-js** is a machine learning framework for the browser. It aims to bring
@@ -323,7 +324,7 @@ pnpm -C website dev
 
 ## Future work / help wanted
 
-Contributions are welcomed! Especially in:
+Contributions are welcomed! Some fruitful areas to look into:
 
 - Adding support for more JAX functions and operations, see [compatibility table](./FEATURES.md).
 - Improving performance of the WebGPU and Wasm runtimes, generating better kernels, and using SIMD
@@ -334,3 +335,5 @@ Contributions are welcomed! Especially in:
 - Helping the JIT compiler to fuse operations in more cases, like `tanh` branches.
 - Adding WebGL runtime for older browsers that don't support WebGPU.
 - Making a fast transformer inference engine, comparing against onnxruntime-web.
+
+You may join our [Discord server](https://discord.gg/BW6YsCd4Tf) and chat with the community.
