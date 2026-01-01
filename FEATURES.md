@@ -502,39 +502,39 @@ Cholesky but are missing other building blocks like:
 - LU decomposition (solver)
 - Householder iteration (QR, SVD, eigenvalues)
 
-| API                | Support | Notes             |
-| ------------------ | ------- | ----------------- |
-| `cholesky`         | 🟡      | Not yet on WebGPU |
-| `cond`             | 🔴      |                   |
-| `cross`            | 🟠      |                   |
-| `det`              | 🔴      |                   |
-| `diagonal`         | 🟢      |                   |
-| `eig`              | 🔴      |                   |
-| `eigh`             | 🔴      |                   |
-| `eigvals`          | 🔴      |                   |
-| `eigvalsh`         | 🔴      |                   |
-| `inv`              | 🔴      |                   |
-| `lstsq`            | 🔴      |                   |
-| `matmul`           | 🟢      |                   |
-| `matrix_norm`      | 🟠      |                   |
-| `matrix_power`     | 🔴      |                   |
-| `matrix_rank`      | 🔴      |                   |
-| `matrix_transpose` | 🟢      |                   |
-| `multi_dot`        | 🟠      |                   |
-| `norm`             | 🟠      |                   |
-| `outer`            | 🟢      |                   |
-| `pinv`             | 🔴      |                   |
-| `qr`               | 🔴      |                   |
-| `slogdet`          | 🔴      |                   |
-| `solve`            | 🔴      |                   |
-| `svd`              | 🔴      |                   |
-| `svdvals`          | 🔴      |                   |
-| `tensordot`        | 🟢      |                   |
-| `tensorinv`        | 🔴      |                   |
-| `tensorsolve`      | 🔴      |                   |
-| `trace`            | 🟢      |                   |
-| `vector_norm`      | 🟠      |                   |
-| `vecdot`           | 🟢      |                   |
+| API                | Support | Notes                                   |
+| ------------------ | ------- | --------------------------------------- |
+| `cholesky`         | 🟡      | Not yet on WebGPU                       |
+| `cond`             | 🔴      |                                         |
+| `cross`            | 🟠      |                                         |
+| `det`              | 🔴      |                                         |
+| `diagonal`         | 🟢      |                                         |
+| `eig`              | 🔴      |                                         |
+| `eigh`             | 🔴      |                                         |
+| `eigvals`          | 🔴      |                                         |
+| `eigvalsh`         | 🔴      |                                         |
+| `inv`              | 🔴      |                                         |
+| `lstsq`            | 🟡      | Cholesky-based, less stable than QR/SVD |
+| `matmul`           | 🟢      |                                         |
+| `matrix_norm`      | 🟠      |                                         |
+| `matrix_power`     | 🔴      |                                         |
+| `matrix_rank`      | 🔴      |                                         |
+| `matrix_transpose` | 🟢      |                                         |
+| `multi_dot`        | 🟠      |                                         |
+| `norm`             | 🟠      |                                         |
+| `outer`            | 🟢      |                                         |
+| `pinv`             | 🔴      |                                         |
+| `qr`               | 🔴      |                                         |
+| `slogdet`          | 🔴      |                                         |
+| `solve`            | 🔴      |                                         |
+| `svd`              | 🔴      |                                         |
+| `svdvals`          | 🔴      |                                         |
+| `tensordot`        | 🟢      |                                         |
+| `tensorinv`        | 🔴      |                                         |
+| `tensorsolve`      | 🔴      |                                         |
+| `trace`            | 🟢      |                                         |
+| `vector_norm`      | 🟠      |                                         |
+| `vecdot`           | 🟢      |                                         |
 
 ## [`jax.lax` module](https://docs.jax.dev/en/latest/jax.lax.html)
 
