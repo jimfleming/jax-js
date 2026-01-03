@@ -38,6 +38,7 @@ import {
   pad,
   Primitive,
   PrimitiveParams,
+  randomBits,
   reciprocal,
   reduce,
   reshape,
@@ -308,7 +309,11 @@ const vmapRules: Partial<{ [P in Primitive]: VmapRule<P> }> = {
     const outs = split(x, newAxis, sizes);
     return [outs, rep(outs.length, xBdim)];
   },
-  // TODO: random_bits
+  [Primitive.RandomBits](axisSize, [k0, k1], [bdim0, bdim1], { shape, mode }) {
+    k0 = moveBatchAxis(axisSize, bdim0, 0, k0);
+    k1 = moveBatchAxis(axisSize, bdim1, 0, k1);
+    return [[randomBits(k0, k1, [axisSize, ...shape], mode)], [0]];
+  },
   [Primitive.Gather](
     axisSize,
     [x, ...indices],

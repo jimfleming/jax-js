@@ -688,14 +688,18 @@ const jitRules: { [P in Primitive]: JitRule<P> } = {
     return { exp };
   },
   [Primitive.RandomBits]: (keys, keyShapes, { shape, mode }) => {
+    const keyShape = keyShapes[0].shape;
     const mapping = (st: ShapeTracker): ShapeTracker | undefined => {
       if (!deepEqual(st.shape, shape))
-        return st.broadcast(shape, range(shape.length - st.shape.length));
+        return st.broadcast(shape, range(st.shape.length, shape.length));
     };
     const k0 = reshapeViews(keys[0], mapping);
     const k1 = reshapeViews(keys[1], mapping);
     const c0 = AluExp.u32(0);
-    const c1 = AluExp.cast(DType.Uint32, AluVar.gidx);
+    const c1 = AluExp.mod(
+      AluExp.cast(DType.Uint32, AluVar.gidx),
+      AluExp.u32(prod(shape.slice(keyShape.length))),
+    );
     const exp = AluExp.threefry2x32(k0, k1, c0, c1, mode);
     return { exp: [exp] };
   },

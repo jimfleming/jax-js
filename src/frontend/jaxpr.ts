@@ -880,10 +880,14 @@ export const abstractEvalRules: { [P in Primitive]: AbstractEvalRule<P> } = {
         `RandomBits requires uint32 keys, got ${k0.dtype} and ${k1.dtype}`,
       );
     }
-    const keyShape = generalBroadcast(k0.shape, k1.shape);
-    if (!deepEqual(generalBroadcast(keyShape, shape), shape)) {
+    if (!deepEqual(k0.shape, k1.shape)) {
       throw new TypeError(
-        `Keys of shapes ${k0.shape} and ${k1.shape} cannot be broadcast to shape ${shape}`,
+        `RandomBits: Keys have different shapes ${k0.shape} and ${k1.shape}`,
+      );
+    }
+    if (!deepEqual(shape.slice(0, k0.ndim), k0.shape)) {
+      throw new TypeError(
+        `RandomBits: generated shape ${shape} must match key shape ${k0.shape}`,
       );
     }
     return [new ShapedArray(shape, DType.Uint32, false)];

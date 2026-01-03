@@ -20,7 +20,7 @@ import * as core from "../frontend/core";
 import { bitcast, randomBits } from "../frontend/core";
 import { jit } from "../frontend/jaxpr";
 
-function validateKeyShape(key: Array): number[] {
+function validateKeyShape(key: Array, scalar = false): number[] {
   if (key.ndim === 0) {
     throw new Error("Key must have at least one dimension.");
   }
@@ -29,11 +29,17 @@ function validateKeyShape(key: Array): number[] {
       `Invalid key shape: ${key.shape}. Expected last dimension to be 2.`,
     );
   }
+  if (scalar && key.shape.length > 1) {
+    throw new Error(
+      `Expected a single PRNG key, but got a batch of keys with shape` +
+        ` ${JSON.stringify(key.shape)} - use jax.vmap for batching.`,
+    );
+  }
   return key.shape.slice(0, -1);
 }
 
 function getK01(key: Array): [Array, Array] {
-  const keyShape = validateKeyShape(key);
+  const keyShape = validateKeyShape(key, true);
   let [k0, k1] = core.split(key, -1, [1, 1]) as [Array, Array];
   k0 = k0.reshape(keyShape); // Remove the last dimension of size 1
   k1 = k1.reshape(keyShape);
@@ -41,10 +47,16 @@ function getK01(key: Array): [Array, Array] {
 }
 
 /** Create a pseudo-random number generator (PRNG) key from 32-bit integer seed. */
-export function key(seed: number): Array {
-  seed = seed >>> 0;
-  // To match JAX, put the 32-bit seed into a 64-bit key in this way.
-  return array([0, seed], { dtype: DType.Uint32 });
+export function key(seed: ArrayLike): Array {
+  seed = array(seed, { dtype: DType.Uint32 });
+  if (seed.ndim !== 0) {
+    throw new Error(
+      `key: seed must be a scalar integer, but got shape ${seed.shape}` +
+        ` - use jax.vmap for batching.`,
+    );
+  }
+  // To match JAX, put the 32-bit seed into a 64-bit key like `[0, seed]`.
+  return stack([0, seed]);
 }
 
 /** Splits a PRNG key into `num` new keys by adding a leading axis. */

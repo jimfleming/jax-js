@@ -10,6 +10,7 @@ import {
 import {
   checkAxis,
   DEBUG,
+  deepEqual,
   generalBroadcast,
   invertPermutation,
   isNumberPair,
@@ -334,6 +335,15 @@ export function randomBits(
   shape: number[],
   mode: "xor" | 0 | 1 = "xor",
 ) {
+  if (
+    !deepEqual(k0.shape, k1.shape) ||
+    k0.dtype !== DType.Uint32 ||
+    k1.dtype !== DType.Uint32
+  )
+    throw new Error(
+      `randomBits: key parts must be uint32 with the same shape, got` +
+        ` ${ShapedArray.fromAval(k0.aval)} and ${ShapedArray.fromAval(k1.aval)}`,
+    );
   return bind1(Primitive.RandomBits, [k0, k1], { shape, mode });
 }
 
