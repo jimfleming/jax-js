@@ -141,6 +141,26 @@ export const vjp = linearizeModule.vjp as <
 
 /**
  * @function
+ * Like vjp, but expects f to return [output, aux] tuple.
+ * Aux is returned unchanged and not differentiated.
+ */
+export const vjpWithAux = linearizeModule.vjpWithAux as <
+  F extends (...args: any[]) => [JsTree<Array>, JsTree<Array>],
+>(
+  f: F,
+  ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
+) => [
+  ReturnType<F>[0],
+  OwnedFunction<
+    (
+      cotangents: MapJsTree<ReturnType<F>[0], Array, ArrayLike>,
+    ) => MapJsTree<Parameters<F>, ArrayLike, Array>
+  >,
+  ReturnType<F>[1],
+];
+
+/**
+ * @function
  * Compute the gradient of a scalar-valued function `f` with respect to its
  * first argument.
  */

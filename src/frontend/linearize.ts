@@ -25,6 +25,7 @@ import {
   concatenate,
   conv,
   flattenFun,
+  flattenFunWithAux,
   flip,
   fullRaise,
   mul,
@@ -978,6 +979,58 @@ export function vjp(
   fVjp.dispose = dispose;
 
   return [primalsOut, fVjp];
+}
+
+/** Like vjp, but expects f to return [output, aux] tuple. */
+export function vjpWithAux(
+  f: (...primals: any) => [any, any],
+  ...primalsIn: any
+): [any, OwnedFunction<(cotangents: any) => any>, any] {
+  const [primalsInFlat, inTree] = treeFlatten(primalsIn);
+  const [fFlat, mainTree, auxTree] = flattenFunWithAux(f, inTree);
+
+  // Use existing vjpFlat - it processes [main, aux] outputs together
+  const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
+    fFlat,
+    primalsInFlat.map(pureArray),
+  );
+
+  if (mainTree.value === undefined || auxTree.value === undefined) {
+    throw new Error("Trees were not set in vjpWithAux");
+  }
+
+  // Split outputs using tree sizes
+  const mainSize = mainTree.value.size;
+  const mainPrimalsFlat = primalsOutFlat.slice(0, mainSize);
+  const auxPrimalsFlat = primalsOutFlat.slice(mainSize);
+
+  // Store aux avals upfront (for creating zeros in pullback)
+  const auxAvals = auxPrimalsFlat.map((t) => t.aval);
+
+  const primalsOut = treeUnflatten(mainTree.value, mainPrimalsFlat);
+  const aux = treeUnflatten(auxTree.value, auxPrimalsFlat);
+
+  const fVjp = ((cotangentsOut: any) => {
+    const [cotangentsOutFlat, cotangentTree] = treeFlatten(cotangentsOut);
+    if (!mainTree.value!.equals(cotangentTree)) {
+      throw new TreeMismatchError("vjpWithAux", mainTree.value!, cotangentTree);
+    }
+
+    // Pad with zeros for aux - these contribute nothing to gradients
+    const auxZeros = auxAvals.map((aval) =>
+      zeros(aval.shape, { dtype: aval.dtype }),
+    );
+    const fullCotangentsFlat = [
+      ...cotangentsOutFlat.map(pureArray),
+      ...auxZeros,
+    ];
+
+    const cotangentsInFlat = fVjpFlat(...fullCotangentsFlat);
+    return treeUnflatten(inTree, cotangentsInFlat);
+  }) as OwnedFunction<(cotangents: any) => any>;
+  fVjp.dispose = dispose;
+
+  return [primalsOut, fVjp, aux];
 }
 
 export function grad(f: (...primals: any) => Tracer) {

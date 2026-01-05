@@ -1204,6 +1204,37 @@ export function flattenFun(
   return [flatFun, store];
 }
 
+/** Like flattenFun, but expects f to return [main, aux] tuple. */
+export function flattenFunWithAux(
+  f: any,
+  inTree: JsTreeDef,
+): [any, { value: JsTreeDef | undefined }, { value: JsTreeDef | undefined }] {
+  const mainTreeStore: { value: JsTreeDef | undefined } = { value: undefined };
+  const auxTreeStore: { value: JsTreeDef | undefined } = { value: undefined };
+
+  const flatFun = (...argsFlat: any[]) => {
+    const pytreeArgs = treeUnflatten(inTree, argsFlat);
+    const result = f(...pytreeArgs);
+
+    if (!Array.isArray(result) || result.length !== 2) {
+      throw new TypeError(
+        "vjpWithAux requires function to return [output, aux] tuple",
+      );
+    }
+
+    const [main, aux] = result;
+    const [mainFlat, mainTree] = treeFlatten(main);
+    const [auxFlat, auxTree] = treeFlatten(aux);
+
+    mainTreeStore.value = mainTree;
+    auxTreeStore.value = auxTree;
+
+    return [...mainFlat, ...auxFlat];
+  };
+
+  return [flatFun, mainTreeStore, auxTreeStore];
+}
+
 export class UseAfterFreeError extends ReferenceError {
   constructor(tracer: Tracer) {
     super(
