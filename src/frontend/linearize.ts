@@ -988,8 +988,6 @@ export function vjpWithAux(
 ): [any, OwnedFunction<(cotangents: any) => any>, any] {
   const [primalsInFlat, inTree] = treeFlatten(primalsIn);
   const [fFlat, mainTree, auxTree] = flattenFunWithAux(f, inTree);
-
-  // Use existing vjpFlat - it processes [main, aux] outputs together
   const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
     fFlat,
     primalsInFlat.map(pureArray),
@@ -999,12 +997,10 @@ export function vjpWithAux(
     throw new Error("Trees were not set in vjpWithAux");
   }
 
-  // Split outputs using tree sizes
   const mainSize = mainTree.value.size;
   const mainPrimalsFlat = primalsOutFlat.slice(0, mainSize);
   const auxPrimalsFlat = primalsOutFlat.slice(mainSize);
 
-  // Store aux avals upfront (for creating zeros in pullback)
   const auxAvals = auxPrimalsFlat.map((t) => t.aval);
 
   const primalsOut = treeUnflatten(mainTree.value, mainPrimalsFlat);
@@ -1016,7 +1012,6 @@ export function vjpWithAux(
       throw new TreeMismatchError("vjpWithAux", mainTree.value!, cotangentTree);
     }
 
-    // Pad with zeros for aux - these contribute nothing to gradients
     const auxZeros = auxAvals.map((aval) =>
       zeros(aval.shape, { dtype: aval.dtype }),
     );
@@ -1078,7 +1073,6 @@ export function valueAndGradWithAux(f: (...primals: any) => [Tracer, any]) {
     if (x.length === 0) {
       throw new Error("grad requires at least one argument to differentiate");
     }
-    // JAX convention, differentiate with respect to the first argument.
     const [y, fVjp, aux] = vjpWithAux(f, x[0], ...x.slice(1).map(stopGradient));
     if (!(y instanceof Tracer) || ndim(y) !== 0) {
       throw new TypeError("grad requires a scalar output");
