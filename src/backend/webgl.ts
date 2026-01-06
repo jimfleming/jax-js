@@ -10,7 +10,7 @@ import {
 } from "../backend";
 import { Routine } from "../routine";
 import { tuneNullopt } from "../tuner";
-import { DEBUG, range } from "../utils";
+import { DEBUG, range, strip1 } from "../utils";
 import { erfSrc, threefrySrc } from "./webgl/builtins";
 
 /** Information about a compiled WebGL shader program. */
@@ -395,12 +395,14 @@ function generateShader(kernel: Kernel): ShaderInfo {
   );
 
   // All samplers are float textures (RGBA32F) - we use bit reinterpretation
+  const args = Array.from({ length: nargs }, (_, i) => `in${i}`);
+  const resultType = glslType(outputDtype);
   for (let i = 0; i < nargs; i++) {
-    emit(`uniform highp sampler2D in${i};`);
+    emit(`uniform highp sampler2D ${args[i]};`);
   }
 
   // Output is always vec4 (RGBA32F) - we convert non-float types with bit casts
-  emit("out vec4 outColor;");
+  emit("out vec4 out0;");
 
   // Generate fetch functions for each input dtype
   // All textures are RGBA32F, but we reinterpret bits based on dtype
@@ -409,107 +411,62 @@ function generateShader(kernel: Kernel): ShaderInfo {
     fetchFunctions.add(dtype);
   }
   for (const dtype of fetchFunctions) {
-    emit(generateFetchFunction(dtype));
+    emit(generateLoadFunction(dtype));
   }
 
   // Emit builtin functions
   if (builtins.erf) emit(erfSrc);
   if (builtins.threefry) emit(threefrySrc);
 
+  // Begin compute() function
+  emit(
+    `${resultType} compute(int gidx) {`,
+    pushIndent,
+    `${resultType} result = ${constToGlsl(outputDtype, 0)};`,
+    `if (gidx < ${kernel.size}) {`,
+    pushIndent,
+  );
+  if (!re) {
+    // Non-reduction kernel: simple element-wise computation
+    const code = generateExpression(tune.exp, args, inputDtypes);
+    emit(`result = ${strip1(code)};`);
+  } else {
+    // Reduction kernel: need accumulator and reduction loop
+    const accType = glslType(re.dtype);
+    const accInit = constToGlsl(re.dtype, re.identity);
+    emit(
+      `${accType} acc = ${accInit};`,
+      `for (int ridx = 0; ridx < ${tune.size.reduce}; ridx++) {`,
+      pushIndent,
+    );
+    const code = generateExpression(tune.exp, args, inputDtypes);
+    if (re.op === AluOp.Add) emit(`acc += ${strip1(code)};`);
+    else if (re.op === AluOp.Mul) emit(`acc *= ${strip1(code)};`);
+    else if (re.op === AluOp.Min) {
+      if (re.dtype !== DType.Bool) emit(`acc = min(acc, ${strip1(code)});`);
+      else emit(`acc = acc && ${code};`);
+    } else if (re.op === AluOp.Max) {
+      if (re.dtype !== DType.Bool) emit(`acc = max(acc, ${strip1(code)});`);
+      else emit(`acc = acc || ${code};`);
+    } else {
+      throw new Error(`Unsupported reduction op: ${re.op}`);
+    }
+    emit(popIndent, "}"); // End reduction loop
+    emit(`result = ${generateExpression(tune.epilogue!, args, inputDtypes)};`);
+  }
+  emit(popIndent, "}", "return result;", popIndent, "}\n"); // End compute() function
+
   emit(
     "void main() {",
     pushIndent,
     "ivec2 fragCoord = ivec2(gl_FragCoord.xy);",
     `int texelIdx = fragCoord.y * ${outputSize.width} + fragCoord.x;`,
-    "int baseIdx = texelIdx * 4;",
-    "",
-  );
-
-  // Generate code for 4 output values (RGBA)
-  const args = Array.from({ length: nargs }, (_, i) => `in${i}`);
-  const resultType = glslType(outputDtype);
-
-  if (!re) {
-    // Non-reduction kernel: simple element-wise computation
-    for (let channel = 0; channel < 4; channel++) {
-      emit(
-        `int gidx${channel} = baseIdx + ${channel};`,
-        `${resultType} result${channel} = ${constToGlsl(outputDtype, 0)};`,
-        `if (gidx${channel} < ${kernel.size}) {`,
-        pushIndent,
-      );
-
-      // Generate expression for this channel
-      const code = generateExpression(
-        tune.exp,
-        args,
-        `gidx${channel}`,
-        inputDtypes,
-      );
-      emit(`result${channel} = ${code};`, popIndent, "}");
-    }
-  } else {
-    // Reduction kernel: need accumulator and reduction loop
-    const accType = glslType(re.dtype);
-    const identity = constToGlsl(re.dtype, re.identity);
-
-    for (let channel = 0; channel < 4; channel++) {
-      emit(`int gidx${channel} = baseIdx + ${channel};`);
-      emit(`${resultType} result${channel} = ${constToGlsl(outputDtype, 0)};`);
-      emit(`if (gidx${channel} < ${kernel.size}) {`, pushIndent);
-      emit(`${accType} acc${channel} = ${identity};`);
-      emit(
-        `for (int ridx = 0; ridx < ${tune.size.reduce}; ridx++) {`,
-        pushIndent,
-      );
-
-      const bodyCode = generateExpression(
-        tune.exp,
-        args,
-        `gidx${channel}`,
-        inputDtypes,
-      );
-
-      if (re.op === AluOp.Add) {
-        emit(`acc${channel} += ${bodyCode};`);
-      } else if (re.op === AluOp.Mul) {
-        emit(`acc${channel} *= ${bodyCode};`);
-      } else if (re.op === AluOp.Min) {
-        if (re.dtype !== DType.Bool)
-          emit(`acc${channel} = min(acc${channel}, ${bodyCode});`);
-        else emit(`acc${channel} = acc${channel} && ${bodyCode};`);
-      } else if (re.op === AluOp.Max) {
-        if (re.dtype !== DType.Bool)
-          emit(`acc${channel} = max(acc${channel}, ${bodyCode});`);
-        else emit(`acc${channel} = acc${channel} || ${bodyCode};`);
-      } else {
-        throw new Error(`Unsupported reduction op: ${re.op}`);
-      }
-
-      emit(popIndent, "}");
-
-      if (tune.epilogue) {
-        const epilogueCode = generateExpression(
-          tune.epilogue,
-          args,
-          `gidx${channel}`,
-          inputDtypes,
-          `acc${channel}`,
-        );
-        emit(`result${channel} = ${epilogueCode};`);
-      } else {
-        emit(
-          `result${channel} = ${accType === resultType ? `acc${channel}` : `${resultType}(acc${channel})`};`,
-        );
-      }
-
-      emit(popIndent, "}");
-    }
-  }
-
-  // Convert output to vec4 (RGBA32F) - use bit casts for non-float types
-  emit(
-    `outColor = vec4(${range(4)
+    `${resultType} result0 = compute(texelIdx * 4);`,
+    `${resultType} result1 = compute(texelIdx * 4 + 1);`,
+    `${resultType} result2 = compute(texelIdx * 4 + 2);`,
+    `${resultType} result3 = compute(texelIdx * 4 + 3);`,
+    // Convert output to vec4 (RGBA32F) - use bit casts for non-float types
+    `out0 = vec4(${range(4)
       .map((i) => toRGBA32F(outputDtype, `result${i}`))
       .join(", ")});`,
   );
@@ -522,13 +479,6 @@ function generateShader(kernel: Kernel): ShaderInfo {
     outputDtype,
   };
 }
-
-// Vertex shader for full-screen triangle
-const vertexShaderSource = `#version 300 es
-precision highp float;
-const vec2 pos[3] = vec2[](vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
-void main() { gl_Position = vec4(pos[gl_VertexID], 0.0, 1.0); }
-`;
 
 function compile(gl: WebGL2RenderingContext, type: GLenum, src: string) {
   const s = gl.createShader(type)!;
@@ -549,6 +499,13 @@ function link(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string) {
     throw new Error(gl.getProgramInfoLog(p) ?? "Unknown program link error");
   return p;
 }
+
+// Vertex shader for full-screen triangle
+const vertexShaderSource = `#version 300 es
+precision highp float;
+const vec2 pos[3] = vec2[](vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+void main() { gl_Position = vec4(pos[gl_VertexID], 0.0, 1.0); }
+`;
 
 function compileShader(
   gl: WebGL2RenderingContext,
@@ -598,14 +555,8 @@ function glslType(dtype: DType): string {
   }
 }
 
-/**
- * Generate a fetch function for a specific dtype.
- *
- * All textures are RGBA32F, so we read float values and reinterpret bits
- * using floatBitsToInt/floatBitsToUint for non-float types.
- */
-function generateFetchFunction(dtype: DType): string {
-  const funcName = `fetch_${dtype.replace("float", "f").replace("int", "i").replace("uint", "u").replace("bool", "b")}`;
+function generateLoadFunction(dtype: DType): string {
+  const funcName = `load_${dtype}`;
   const returnType = glslType(dtype);
 
   // All textures are sampler2D (RGBA32F), read as vec4
@@ -665,7 +616,9 @@ function constToGlsl(dtype: DType, value: number): string {
     case DType.Float32:
       if (Number.isNaN(value)) return "uintBitsToFloat(0x7fc00000u)";
       if (!Number.isFinite(value)) {
-        return value > 0 ? "(1.0 / 0.0)" : "(-1.0 / 0.0)";
+        return value > 0
+          ? "uintBitsToFloat(0x7f800000u)"
+          : "uintBitsToFloat(0xff800000u)";
       }
       return "float(" + value.toString() + ")";
     default:
@@ -677,9 +630,7 @@ function constToGlsl(dtype: DType, value: number): string {
 function generateExpression(
   exp: AluExp,
   args: string[],
-  gidxVar: string,
   inputDtypes: DType[],
-  accVar?: string,
 ): string {
   const expContext = new Map<AluExp, string>();
 
@@ -703,12 +654,8 @@ function generateExpression(
         if (isFloatDtype(dtype)) source = `trunc(${a} / ${b})`;
         else source = `(${a} / ${b})`;
       } else if (op === AluOp.Mod) {
-        // For mod, ensure both operands are same type
-        if (isFloatDtype(dtype)) {
-          source = `(${a} - ${b} * trunc(${a} / ${b}))`;
-        } else {
-          source = `(${a} - ${b} * (${a} / ${b}))`;
-        }
+        if (isFloatDtype(dtype)) source = `(${a} - ${b} * trunc(${a} / ${b}))`;
+        else source = `(${a} % ${b})`;
       } else if (op === AluOp.Min) {
         if (dtype === DType.Bool) source = `(${a} && ${b})`;
         else source = `min(${a}, ${b})`;
@@ -729,71 +676,55 @@ function generateExpression(
       }
     } else if (AluGroup.Unary.has(op)) {
       const a = gen(src[0]);
-      if (op === AluOp.Sin) source = `sin(${a})`;
-      else if (op === AluOp.Cos) source = `cos(${a})`;
-      else if (op === AluOp.Asin) source = `asin(${a})`;
-      else if (op === AluOp.Atan) source = `atan(${a})`;
-      else if (op === AluOp.Exp) source = `exp(${a})`;
-      else if (op === AluOp.Log) source = `log(${a})`;
-      else if (op === AluOp.Sqrt) source = `sqrt(${a})`;
+      if (op === AluOp.Sin) source = `sin(${strip1(a)})`;
+      else if (op === AluOp.Cos) source = `cos(${strip1(a)})`;
+      else if (op === AluOp.Asin) source = `asin(${strip1(a)})`;
+      else if (op === AluOp.Atan) source = `atan(${strip1(a)})`;
+      else if (op === AluOp.Exp) source = `exp(${strip1(a)})`;
+      else if (op === AluOp.Log) source = `log(${strip1(a)})`;
+      else if (op === AluOp.Erf) source = `erf(${strip1(a)})`;
+      else if (op === AluOp.Erfc) source = `erfc(${strip1(a)})`;
+      else if (op === AluOp.Sqrt) source = `sqrt(${strip1(a)})`;
+      else if (op === AluOp.Floor) source = `floor(${strip1(a)})`;
+      else if (op === AluOp.Ceil) source = `ceil(${strip1(a)})`;
       else if (op === AluOp.Reciprocal) source = `(1.0 / ${a})`;
-      else if (op === AluOp.Floor) source = `floor(${a})`;
-      else if (op === AluOp.Ceil) source = `ceil(${a})`;
-      else if (op === AluOp.Cast) source = `${glslType(dtype)}(${a})`;
+      else if (op === AluOp.Cast) source = `${glslType(dtype)}(${strip1(a)})`;
       else if (op === AluOp.Bitcast) {
         const dtype0 = src[0].dtype;
         if (dtype === dtype0) source = a;
         else if (dtype === DType.Float32) {
-          if (dtype0 === DType.Int32) source = `intBitsToFloat(${a})`;
-          else if (dtype0 === DType.Uint32) source = `uintBitsToFloat(${a})`;
+          if (dtype0 === DType.Int32) source = `intBitsToFloat(${strip1(a)})`;
+          else if (dtype0 === DType.Uint32)
+            source = `uintBitsToFloat(${strip1(a)})`;
         } else if (dtype === DType.Int32) {
-          if (dtype0 === DType.Float32) source = `floatBitsToInt(${a})`;
-          else if (dtype0 === DType.Uint32) source = `int(${a})`;
+          if (dtype0 === DType.Float32) source = `floatBitsToInt(${strip1(a)})`;
+          else if (dtype0 === DType.Uint32) source = `int(${strip1(a)})`;
         } else if (dtype === DType.Uint32) {
-          if (dtype0 === DType.Float32) source = `floatBitsToUint(${a})`;
-          else if (dtype0 === DType.Int32) source = `uint(${a})`;
+          if (dtype0 === DType.Float32)
+            source = `floatBitsToUint(${strip1(a)})`;
+          else if (dtype0 === DType.Int32) source = `uint(${strip1(a)})`;
         }
-      } else if (op === AluOp.Erf) {
-        source = `erf(${a})`;
-      } else if (op === AluOp.Erfc) {
-        source = `erfc(${a})`;
       }
     } else if (op === AluOp.Threefry2x32) {
-      const k0 = gen(src[0]);
-      const k1 = gen(src[1]);
-      const c0 = gen(src[2]);
-      const c1 = gen(src[3]);
+      const [k0, k1, c0, c1] = src.map((x) => strip1(gen(x)));
       const mode = arg as string | number;
       const call = `threefry2x32(uvec2(${k0}, ${k1}), uvec2(${c0}, ${c1}))`;
       if (mode === "xor") source = `(${call}.x ^ ${call}.y)`;
       else if (mode === 0) source = `${call}.x`;
       else if (mode === 1) source = `${call}.y`;
     } else if (op === AluOp.Where) {
-      const cond = gen(src[0]);
-      const t = gen(src[1]);
-      const f = gen(src[2]);
+      const [cond, t, f] = src.map(gen);
       source = `(${cond} ? ${t} : ${f})`;
     } else if (op === AluOp.Const) {
       source = constToGlsl(dtype, arg);
     } else if (op === AluOp.Special) {
-      const [name] = arg as [string, number];
-      if (name === "gidx") source = gidxVar;
-      else if (name === "ridx") source = "ridx";
-      else source = name;
+      source = arg[0];
     } else if (op === AluOp.Variable) {
-      const varName = arg as string;
-      // Handle accumulator variable in epilogue
-      if (varName === "acc" && accVar) {
-        source = accVar;
-      } else {
-        source = varName;
-      }
+      source = arg;
     } else if (op === AluOp.GlobalIndex) {
       const gid: number = arg[0];
       const bufidx = gen(src[0]);
-      const inputDtype = inputDtypes[gid];
-      const fetchFunc = `fetch_${inputDtype.replace("float", "f").replace("int", "i").replace("uint", "u").replace("bool", "b")}`;
-      source = `${fetchFunc}(${args[gid]}, ${bufidx})`;
+      source = `load_${inputDtypes[gid]}(${args[gid]}, ${strip1(bufidx)})`;
     }
     if (!source) throw new UnsupportedOpError(op, dtype, "webgl", arg);
     expContext.set(e, source);
