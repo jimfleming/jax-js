@@ -435,12 +435,12 @@ suite("jax.grad()", () => {
 
 suite("jax.valueAndGrad()", () => {
   test("returns value and gradient", () => {
-    const f = (x: np.Array) => x.ref.mul(x);
+    const f = (x: np.Array) => x.ref.mul(x).sum();
     const x = np.array([2, 3]);
     const [value, gradient] = valueAndGrad(f)(x);
 
-    expect(value).toBeAllclose([4, 9]);
-    expect(gradient).toBeAllclose([4, 6]);
+    expect(value).toBeAllclose(13); // 4 + 9 = 13
+    expect(gradient).toBeAllclose([4, 6]); // 2x = [4, 6]
   });
 
   test("hasAux returns value, gradient, and aux", () => {

@@ -1218,7 +1218,7 @@ export function flattenFunWithAux(
 
     if (!Array.isArray(result) || result.length !== 2) {
       throw new TypeError(
-        "vjpWithAux requires function to return [output, aux] tuple",
+        "vjp with hasAux: true requires function to return [output, aux] tuple",
       );
     }
 

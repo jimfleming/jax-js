@@ -964,7 +964,9 @@ export function vjp(
 export function vjp(
   f: (...primals: any) => any,
   ...args: any[]
-): [any, OwnedFunction<(...cotangents: any) => any>] | [any, OwnedFunction<(...cotangents: any) => any>, any] {
+):
+  | [any, OwnedFunction<(...cotangents: any) => any>]
+  | [any, OwnedFunction<(...cotangents: any) => any>, any] {
   // Check if second argument (first in args) is options object with hasAux
   let opts: { hasAux?: boolean } | undefined;
   let primalsIn = args;

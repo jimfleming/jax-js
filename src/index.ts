@@ -234,7 +234,11 @@ export function valueAndGrad<
   opts: { hasAux: true },
 ): (
   ...primals: MapJsTree<Parameters<F>, Array, ArrayLike>
-) => [ReturnType<F>[0], MapJsTree<Parameters<F>[0], ArrayLike, Array>, ReturnType<F>[1]];
+) => [
+  ReturnType<F>[0],
+  MapJsTree<Parameters<F>[0], ArrayLike, Array>,
+  ReturnType<F>[1],
+];
 export function valueAndGrad(f: any, opts?: any): any {
   return linearizeModule.valueAndGrad(f, opts);
 }
