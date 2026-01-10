@@ -433,6 +433,24 @@ suite.each(devices)("device:%s", (device) => {
     });
   });
 
+  suite("jax.numpy.swapaxes()", () => {
+    test("swaps axis of an array", () => {
+      const x = np.arange(12).reshape([2, 2, 3]);
+      expect(np.swapaxes(x, 1, 2).js()).toEqual([
+        [
+          [0, 3],
+          [1, 4],
+          [2, 5],
+        ],
+        [
+          [6, 9],
+          [7, 10],
+          [8, 11],
+        ],
+      ]);
+    });
+  });
+
   suite("jax.numpy.reshape()", () => {
     test("reshapes a 1D array", () => {
       const x = np.array([1, 2, 3, 4]);
@@ -1612,6 +1630,12 @@ suite.each(devices)("device:%s", (device) => {
           [3, 1],
         ],
       ]);
+    });
+
+    test("concatenate works in jit", () => {
+      const f = jit(np.concatenate);
+      const c = f([np.flip(np.array([1, 2])), np.array([3, 4]), np.array([5])]);
+      expect(c.js()).toEqual([2, 1, 3, 4, 5]);
     });
   });
 
