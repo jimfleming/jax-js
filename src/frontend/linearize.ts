@@ -26,7 +26,6 @@ import {
   concatenate,
   conv,
   flattenFun,
-  flattenFunWithAux,
   flip,
   fullRaise,
   mul,
@@ -1002,28 +1001,24 @@ export function vjp(
   const [primalsInFlat, inTree] = treeFlatten(primalsIn);
 
   if (opts?.hasAux) {
-    const [fFlat, mainTree, auxTree] = flattenFunWithAux(f, inTree);
+    const [fFlat, mainTree, auxTree] = flattenFun(f, inTree, { hasAux: true });
     const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
       fFlat,
       primalsInFlat.map(pureArray),
     );
-
     if (mainTree.value === undefined || auxTree.value === undefined) {
       throw new Error("Trees were not set in vjp with hasAux");
     }
-
     const mainSize = mainTree.value.size;
-    const mainPrimalsFlat = primalsOutFlat.slice(0, mainSize);
-    const auxPrimalsFlat = primalsOutFlat.slice(mainSize);
-
-    const primalsOut = treeUnflatten(mainTree.value, mainPrimalsFlat);
-    const aux = treeUnflatten(auxTree.value, auxPrimalsFlat);
+    const primalsOut = treeUnflatten(
+      mainTree.value,
+      primalsOutFlat.slice(0, mainSize),
+    );
+    const aux = treeUnflatten(auxTree.value, primalsOutFlat.slice(mainSize));
     const fVjp = createPullback(fVjpFlat, mainTree.value, inTree, dispose);
-
     return [primalsOut, fVjp, aux];
   }
 
-  // Normal path: no aux
   const [fFlat, outTree] = flattenFun(f, inTree);
   const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
     fFlat,
@@ -1034,7 +1029,6 @@ export function vjp(
   }
   const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
   const fVjp = createPullback(fVjpFlat, outTree.value, inTree, dispose);
-
   return [primalsOut, fVjp];
 }
 

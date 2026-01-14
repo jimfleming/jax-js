@@ -1223,52 +1223,56 @@ export class TreeMismatchError extends TypeError {
   }
 }
 
+type TreeStore = { value: JsTreeDef | undefined };
+
+/**
+ * Flatten a function for tracing: converts pytree args/outputs to flat arrays.
+ *
+ * When `opts.hasAux` is true, expects `f` to return `[main, aux]` tuple and
+ * applies `stopGradient` to aux outputs. Returns a third store for the aux tree.
+ */
+export function flattenFun(f: any, inTree: JsTreeDef): [any, TreeStore];
 export function flattenFun(
   f: any,
   inTree: JsTreeDef,
-): [any, { value: JsTreeDef | undefined }] {
-  const store: { value: JsTreeDef | undefined } = { value: undefined };
-  const flatFun = (...argsFlat: any[]) => {
-    const pytreeArgs = treeUnflatten(inTree, argsFlat);
-    const out = f(...pytreeArgs);
-    const [outFlat, outTree] = treeFlatten(out);
-    store.value = outTree;
-    return outFlat;
-  };
-  return [flatFun, store];
-}
-
-/** Like flattenFun, but expects f to return [main, aux] tuple. */
-export function flattenFunWithAux(
+  opts: { hasAux: true },
+): [any, TreeStore, TreeStore];
+export function flattenFun(
   f: any,
   inTree: JsTreeDef,
-): [any, { value: JsTreeDef | undefined }, { value: JsTreeDef | undefined }] {
-  const mainTreeStore: { value: JsTreeDef | undefined } = { value: undefined };
-  const auxTreeStore: { value: JsTreeDef | undefined } = { value: undefined };
+  opts?: { hasAux?: boolean },
+): [any, TreeStore] | [any, TreeStore, TreeStore] {
+  const mainTreeStore: TreeStore = { value: undefined };
+  const auxTreeStore: TreeStore = { value: undefined };
 
   const flatFun = (...argsFlat: any[]) => {
     const pytreeArgs = treeUnflatten(inTree, argsFlat);
     const result = f(...pytreeArgs);
 
-    if (!Array.isArray(result) || result.length !== 2) {
-      throw new TypeError(
-        "Function with hasAux: true must return [output, aux] tuple",
-      );
+    if (opts?.hasAux) {
+      if (!Array.isArray(result) || result.length !== 2) {
+        throw new TypeError(
+          "Function with hasAux: true must return [output, aux] tuple",
+        );
+      }
+      const [main, aux] = result;
+      const [mainFlat, mainTree] = treeFlatten(main);
+      const [auxFlat, auxTree] = treeFlatten(aux);
+      mainTreeStore.value = mainTree;
+      auxTreeStore.value = auxTree;
+      // stopGradient on aux skips backward computation through auxiliary outputs
+      return [...mainFlat, ...auxFlat.map(stopGradient)];
     }
 
-    const [main, aux] = result;
-    const [mainFlat, mainTree] = treeFlatten(main);
-    const [auxFlat, auxTree] = treeFlatten(aux);
-
-    mainTreeStore.value = mainTree;
-    auxTreeStore.value = auxTree;
-
-    // stopGradient on aux skips backward computation through auxiliary outputs
-    const auxStopped = auxFlat.map(stopGradient);
-    return [...mainFlat, ...auxStopped];
+    const [outFlat, outTree] = treeFlatten(result);
+    mainTreeStore.value = outTree;
+    return outFlat;
   };
 
-  return [flatFun, mainTreeStore, auxTreeStore];
+  if (opts?.hasAux) {
+    return [flatFun, mainTreeStore, auxTreeStore];
+  }
+  return [flatFun, mainTreeStore];
 }
 
 export class UseAfterFreeError extends ReferenceError {
