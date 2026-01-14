@@ -1241,18 +1241,19 @@ export function flattenFunWithAux(
 
     if (!Array.isArray(result) || result.length !== 2) {
       throw new TypeError(
-        "vjp with hasAux: true requires function to return [output, aux] tuple",
+        "Function with hasAux: true must return [output, aux] tuple",
       );
     }
 
     const [main, aux] = result;
     const [mainFlat, mainTree] = treeFlatten(main);
     const [auxFlat, auxTree] = treeFlatten(aux);
-    const auxStopped = auxFlat.map(stopGradient);
 
     mainTreeStore.value = mainTree;
     auxTreeStore.value = auxTree;
 
+    // stopGradient on aux skips backward computation through auxiliary outputs
+    const auxStopped = auxFlat.map(stopGradient);
     return [...mainFlat, ...auxStopped];
   };
 

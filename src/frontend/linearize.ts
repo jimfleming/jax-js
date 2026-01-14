@@ -4,6 +4,7 @@ import { AluOp, isFloatDtype } from "../alu";
 import {
   dispose as treeDispose,
   flatten as treeFlatten,
+  type JsTreeDef,
   unflatten as treeUnflatten,
 } from "../tree";
 import {
@@ -952,6 +953,27 @@ function vjpFlat(
   return [primalsOut, fVjp, dispose];
 }
 
+/**
+ * Creates a pullback wrapper function that handles tree flattening/unflattening.
+ */
+function createPullback(
+  fVjpFlat: (...cotangents: Tracer[]) => Tracer[],
+  outTree: JsTreeDef,
+  inTree: JsTreeDef,
+  dispose: () => void,
+): OwnedFunction<(cotangents: any) => any> {
+  const fVjp = ((cotangentsOut: any) => {
+    const [cotangentsOutFlat, cotangentTree] = treeFlatten(cotangentsOut);
+    if (!outTree.equals(cotangentTree)) {
+      throw new TreeMismatchError("vjp", outTree, cotangentTree);
+    }
+    const cotangentsInFlat = fVjpFlat(...cotangentsOutFlat.map(pureArray));
+    return treeUnflatten(inTree, cotangentsInFlat);
+  }) as OwnedFunction<(cotangents: any) => any>;
+  fVjp.dispose = dispose;
+  return fVjp;
+}
+
 export function vjp(
   f: (...primals: any) => any,
   ...args: any[]
@@ -996,16 +1018,7 @@ export function vjp(
 
     const primalsOut = treeUnflatten(mainTree.value, mainPrimalsFlat);
     const aux = treeUnflatten(auxTree.value, auxPrimalsFlat);
-
-    const fVjp = ((cotangentsOut: any) => {
-      const [cotangentsOutFlat, cotangentTree] = treeFlatten(cotangentsOut);
-      if (!mainTree.value!.equals(cotangentTree)) {
-        throw new TreeMismatchError("vjp", mainTree.value!, cotangentTree);
-      }
-      const cotangentsInFlat = fVjpFlat(...cotangentsOutFlat.map(pureArray));
-      return treeUnflatten(inTree, cotangentsInFlat);
-    }) as OwnedFunction<(cotangents: any) => any>;
-    fVjp.dispose = dispose;
+    const fVjp = createPullback(fVjpFlat, mainTree.value, inTree, dispose);
 
     return [primalsOut, fVjp, aux];
   }
@@ -1020,17 +1033,7 @@ export function vjp(
     throw new Error("outTree was not set in vjp");
   }
   const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
-
-  // "cotangentsOut" because pullback
-  const fVjp = ((cotangentsOut: any) => {
-    const [cotangentsOutFlat, outTree2] = treeFlatten(cotangentsOut);
-    if (!outTree.value!.equals(outTree2)) {
-      throw new TreeMismatchError("vjp", outTree.value!, outTree2);
-    }
-    const cotangentsInFlat = fVjpFlat(...cotangentsOutFlat.map(pureArray));
-    return treeUnflatten(inTree, cotangentsInFlat);
-  }) as OwnedFunction<(...cotangents: any) => any>;
-  fVjp.dispose = dispose;
+  const fVjp = createPullback(fVjpFlat, outTree.value, inTree, dispose);
 
   return [primalsOut, fVjp];
 }
