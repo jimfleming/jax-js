@@ -163,7 +163,7 @@ suite("jax.vjp()", () => {
     expect(loss).toBeAllclose(6);
     expect(aux).toBeAllclose([2, 4, 6]);
 
-    const [grad] = vjpFn(np.ones([]));
+    const [grad] = vjpFn(1);
     expect(grad).toBeAllclose([1, 1, 1]);
 
     vjpFn.dispose();

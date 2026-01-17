@@ -44,11 +44,17 @@ export {
  */
 export const jvp = jvpModule.jvp as <
   F extends (...args: any[]) => JsTree<Array>,
+  HA extends boolean = false,
 >(
   f: F,
   primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
   tangents: MapJsTree<Parameters<F>, Array, ArrayLike>,
-) => [ReturnType<F>, ReturnType<F>];
+  opts?: { hasAux?: HA },
+) => HA extends true
+  ? ReturnType<F> extends [infer Out, infer Aux]
+    ? [Out, Out, Aux]
+    : never
+  : [ReturnType<F>, ReturnType<F>];
 
 /**
  * @function
@@ -148,7 +154,7 @@ export const vjp = linearizeModule.vjp as <
 >(
   f: F,
   primals: MapJsTree<Parameters<F>, Array, ArrayLike>,
-  opts?: { hasAux: HA },
+  opts?: { hasAux?: HA },
 ) => HA extends true
   ? ReturnType<F> extends [infer Out, infer Aux]
     ? [

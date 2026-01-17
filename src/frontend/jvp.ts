@@ -3,6 +3,7 @@ import { Pair } from "../shape";
 import {
   JsTree,
   flatten as treeFlatten,
+  map as treeMap,
   unflatten as treeUnflatten,
 } from "../tree";
 import { checkAxis, unzip2, zip } from "../utils";
@@ -19,11 +20,13 @@ import {
   cast,
   cholesky,
   cos,
+  currentTraceLevel,
   dot,
   erf,
   erfc,
   exp,
   flattenFun,
+  flattenFunWithAux,
   fullRaise,
   gather,
   idiv,
@@ -450,14 +453,20 @@ export function jvp<F extends (...x: any[]) => any>(
   f: F,
   primals: JsTree<TracerValue>[],
   tangents: JsTree<TracerValue>[],
-): [ReturnType<F>, ReturnType<F>] {
+  { hasAux = false } = {},
+): [any, any, any?] {
   const [primalsFlat, inTree] = treeFlatten(primals);
   const [tangentsFlat, inTree2] = treeFlatten(tangents);
   if (!inTree.equals(inTree2)) {
     throw new TreeMismatchError("jvp", inTree, inTree2);
   }
 
-  const [flatFun, outTree] = flattenFun(f, inTree);
+  let flatFun, outTree, aux;
+  if (hasAux) {
+    [flatFun, outTree, aux] = flattenFunWithAux(f, inTree);
+  } else {
+    [flatFun, outTree] = flattenFun(f, inTree);
+  }
 
   const [primalsOutFlat, tangentsOutFlat] = jvpFlat(
     flatFun,
@@ -469,5 +478,31 @@ export function jvp<F extends (...x: any[]) => any>(
   }
   const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
   const tangentsOut = treeUnflatten(outTree.value, tangentsOutFlat);
-  return [primalsOut as any, tangentsOut as any];
+
+  if (hasAux) {
+    return [primalsOut, tangentsOut, lowerAux(aux!.value)];
+  }
+  return [primalsOut, tangentsOut];
+}
+
+/** Lowering for auxiliary data returned in `hasAux: true` methods. */
+export function lowerAux(aux: any): any {
+  const level = currentTraceLevel();
+
+  return treeMap((x: Tracer) => {
+    if (x instanceof Tracer) {
+      while (x._trace.main.level > level) {
+        if (x instanceof JVPTracer) {
+          x.tangent.dispose();
+          x = x.primal;
+        } else {
+          const y = x.fullLower();
+          if (y._trace.main.level >= x._trace.main.level)
+            throw new Error("internal: lowerAux did not reduce trace level");
+          x = y;
+        }
+      }
+    }
+    return x;
+  }, aux);
 }

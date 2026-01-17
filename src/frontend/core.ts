@@ -571,6 +571,10 @@ export function newDynamic(main: MainTrace): Disposable {
   };
 }
 
+export function currentTraceLevel(): number {
+  return traceStack[traceStack.length - 1].level;
+}
+
 export type TracerValue = Tracer | number | boolean;
 
 export abstract class Trace {
@@ -1223,56 +1227,43 @@ export class TreeMismatchError extends TypeError {
   }
 }
 
-type TreeStore = { value: JsTreeDef | undefined };
+type Store<T> = { value: T | undefined };
 
-/**
- * Flatten a function for tracing: converts pytree args/outputs to flat arrays.
- *
- * When `opts.hasAux` is true, expects `f` to return `[main, aux]` tuple and
- * applies `stopGradient` to aux outputs. Returns a third store for the aux tree.
- */
-export function flattenFun(f: any, inTree: JsTreeDef): [any, TreeStore];
-export function flattenFun(
+/** Flatten a function of `JsTree` input/output for use in tracing. */
+export function flattenFun(f: any, inTree: JsTreeDef): [any, Store<JsTreeDef>] {
+  const store: Store<JsTreeDef> = { value: undefined };
+  const flatFun = (...argsFlat: any[]) => {
+    const pytreeArgs = treeUnflatten(inTree, argsFlat);
+    const out = f(...pytreeArgs);
+    const [outFlat, outTree] = treeFlatten(out);
+    store.value = outTree;
+    return outFlat;
+  };
+  return [flatFun, store];
+}
+
+/** Like flattenFun, but expects f to return [main, aux] tuple. */
+export function flattenFunWithAux(
   f: any,
   inTree: JsTreeDef,
-  opts: { hasAux: true },
-): [any, TreeStore, TreeStore];
-export function flattenFun(
-  f: any,
-  inTree: JsTreeDef,
-  opts?: { hasAux?: boolean },
-): [any, TreeStore] | [any, TreeStore, TreeStore] {
-  const mainTreeStore: TreeStore = { value: undefined };
-  const auxTreeStore: TreeStore = { value: undefined };
-
+): [any, Store<JsTreeDef>, Store<any>] {
+  const store: Store<JsTreeDef> = { value: undefined };
+  const auxStore: Store<any> = { value: undefined };
   const flatFun = (...argsFlat: any[]) => {
     const pytreeArgs = treeUnflatten(inTree, argsFlat);
     const result = f(...pytreeArgs);
-
-    if (opts?.hasAux) {
-      if (!Array.isArray(result) || result.length !== 2) {
-        throw new TypeError(
-          "Function with hasAux: true must return [output, aux] tuple",
-        );
-      }
-      const [main, aux] = result;
-      const [mainFlat, mainTree] = treeFlatten(main);
-      const [auxFlat, auxTree] = treeFlatten(aux);
-      mainTreeStore.value = mainTree;
-      auxTreeStore.value = auxTree;
-      // stopGradient on aux skips backward computation through auxiliary outputs
-      return [...mainFlat, ...auxFlat.map(stopGradient)];
+    if (!Array.isArray(result) || result.length !== 2) {
+      throw new Error(
+        "Function with `hasAux: true` must return [output, aux] tuple",
+      );
     }
-
-    const [outFlat, outTree] = treeFlatten(result);
-    mainTreeStore.value = outTree;
+    const [out, aux] = result;
+    const [outFlat, outTree] = treeFlatten(out);
+    store.value = outTree;
+    auxStore.value = aux;
     return outFlat;
   };
-
-  if (opts?.hasAux) {
-    return [flatFun, mainTreeStore, auxTreeStore];
-  }
-  return [flatFun, mainTreeStore];
+  return [flatFun, store, auxStore];
 }
 
 export class UseAfterFreeError extends ReferenceError {

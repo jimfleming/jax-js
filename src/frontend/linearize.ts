@@ -27,6 +27,7 @@ import {
   concatenate,
   conv,
   flattenFun,
+  flattenFunWithAux,
   flip,
   fullRaise,
   mul,
@@ -63,7 +64,7 @@ import {
   typecheckJaxpr,
   Var,
 } from "./jaxpr";
-import { jvp } from "./jvp";
+import { jvp, lowerAux } from "./jvp";
 import { moveaxis, vmap } from "./vmap";
 
 /** Array value that can either be known or unknown. */
@@ -956,9 +957,15 @@ function vjpFlat(
 export function vjp(
   f: (...primals: any) => any,
   primalsIn: any[],
-): [any, OwnedFunction<(...cotangents: any) => any>] {
+  { hasAux = false } = {},
+): [any, OwnedFunction<(...cotangents: any) => any>, any?] {
   const [primalsInFlat, inTree] = treeFlatten(primalsIn);
-  const [fFlat, outTree] = flattenFun(f, inTree);
+  let fFlat, outTree, aux;
+  if (hasAux) {
+    [fFlat, outTree, aux] = flattenFunWithAux(f, inTree);
+  } else {
+    [fFlat, outTree] = flattenFun(f, inTree);
+  }
   const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
     fFlat,
     primalsInFlat.map(pureArray),
@@ -979,6 +986,9 @@ export function vjp(
   }) as OwnedFunction<(...cotangents: any) => any>;
   fVjp.dispose = dispose;
 
+  if (hasAux) {
+    return [primalsOut, fVjp, lowerAux(aux!.value)];
+  }
   return [primalsOut, fVjp];
 }
 
@@ -1003,14 +1013,21 @@ export type GradOpts = {
 export function grad(f: (...primals: any) => Tracer, opts?: GradOpts) {
   const valueAndGradFn = valueAndGrad(f, opts);
   return (...x: any) => {
-    const [y, dx] = valueAndGradFn(...x);
-    y.dispose();
-    return dx;
+    if (opts?.hasAux) {
+      const [[y, aux], dx] = valueAndGradFn(...x);
+      y.dispose();
+      return [dx, aux];
+    } else {
+      const [y, dx] = valueAndGradFn(...x);
+      y.dispose();
+      return dx;
+    }
   };
 }
 
 export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
   const argnums = opts?.argnums ?? 0; // By default, differentiate w.r.t. first arg.
+  const hasAux = opts?.hasAux ?? false;
   checkInts(argnums);
   const argnumsSet = new Set(typeof argnums === "number" ? [argnums] : argnums);
   return (...x: any) => {
@@ -1021,7 +1038,7 @@ export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
     for (let i = 0; i < x.length; i++) {
       if (!argnumsSet.has(i)) x[i] = treeMap(stopGradient, x[i]);
     }
-    const [y, fVjp] = vjp(f, x);
+    const [y, fVjp, aux] = vjp(f, x, { hasAux });
     if (!(y instanceof Tracer) || ndim(y) !== 0) {
       throw new TypeError("grad requires a scalar output");
     }
@@ -1035,7 +1052,7 @@ export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
     }
     const grads =
       typeof argnums === "number" ? cts[argnums] : argnums.map((i) => cts[i]);
-    return [y, grads];
+    return hasAux ? [[y, aux], grads] : [y, grads];
   };
 }
 

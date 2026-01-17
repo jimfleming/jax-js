@@ -49,7 +49,7 @@ In the tables below, we use a color legend to refer to functions in JAX:
 | `jacfwd`             | 🟢      |                                                 |
 | `jacrev`             | 🟢      |                                                 |
 | `hessian`            | 🟠      |                                                 |
-| `jvp`                | 🟢      | need to add `has_aux`                           |
+| `jvp`                | 🟢      |                                                 |
 | `linearize`          | 🟢      | need to add `has_aux`                           |
 | `linear_transpose`   | 🟠      |                                                 |
 | `vjp`                | 🟢      |                                                 |
