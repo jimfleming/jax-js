@@ -43,7 +43,7 @@ In the tables below, we use a color legend to refer to functions in JAX:
 | `copy_to_host_async` | ⚪️      | no separate "host" device                       |
 | `make_mesh`          | ⚪️      | device sharding                                 |
 | `set_mesh`           | ⚪️      | device sharding                                 |
-| `grad`               | 🟢      | need to add `argnums` and `has_aux`             |
+| `grad`               | 🟢      |                                                 |
 | `value_and_grad`     | 🟢      |                                                 |
 | `jacobian`           | 🟢      |                                                 |
 | `jacfwd`             | 🟢      |                                                 |
@@ -52,7 +52,7 @@ In the tables below, we use a color legend to refer to functions in JAX:
 | `jvp`                | 🟢      | need to add `has_aux`                           |
 | `linearize`          | 🟢      | need to add `has_aux`                           |
 | `linear_transpose`   | 🟠      |                                                 |
-| `vjp`                | 🟢      | need to add `has_aux`                           |
+| `vjp`                | 🟢      |                                                 |
 | `custom_gradient`    | 🔴      | core engine feature                             |
 | `closure_convert`    | 🔴      | core engine feature                             |
 | `checkpoint`         | 🔴      | core engine feature                             |

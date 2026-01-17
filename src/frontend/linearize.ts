@@ -2,12 +2,13 @@
 
 import { AluOp, isFloatDtype } from "../alu";
 import {
-  type JsTreeDef,
   dispose as treeDispose,
   flatten as treeFlatten,
+  map as treeMap,
   unflatten as treeUnflatten,
 } from "../tree";
 import {
+  checkInts,
   DEBUG,
   deepEqual,
   generalBroadcast,
@@ -154,7 +155,7 @@ function linearizeFlat(
 
 export function linearize(
   f: (...primals: any[]) => any,
-  ...primalsIn: any[]
+  primalsIn: any[],
 ): [any, OwnedFunction<(...tangents: any[]) => any>] {
   const [primalsInFlat, inTree] = treeFlatten(primalsIn);
   const [fFlat, outTree] = flattenFun(f, inTree);
@@ -952,73 +953,11 @@ function vjpFlat(
   return [primalsOut, fVjp, dispose];
 }
 
-/**
- * Creates a pullback wrapper function that handles tree flattening/unflattening.
- */
-function createPullback(
-  fVjpFlat: (...cotangents: Tracer[]) => Tracer[],
-  outTree: JsTreeDef,
-  inTree: JsTreeDef,
-  dispose: () => void,
-): OwnedFunction<(cotangents: any) => any> {
-  const fVjp = ((cotangentsOut: any) => {
-    const [cotangentsOutFlat, cotangentTree] = treeFlatten(cotangentsOut);
-    if (!outTree.equals(cotangentTree)) {
-      throw new TreeMismatchError("vjp", outTree, cotangentTree);
-    }
-    const cotangentsInFlat = fVjpFlat(...cotangentsOutFlat.map(pureArray));
-    return treeUnflatten(inTree, cotangentsInFlat);
-  }) as OwnedFunction<(cotangents: any) => any>;
-  fVjp.dispose = dispose;
-  return fVjp;
-}
-
 export function vjp(
   f: (...primals: any) => any,
-  ...args: any[]
-): [any, OwnedFunction<(...cotangents: any) => any>];
-export function vjp(
-  f: (...primals: any) => any,
-  opts: { hasAux: true },
-  ...args: any[]
-): [any, OwnedFunction<(...cotangents: any) => any>, any];
-export function vjp(
-  f: (...primals: any) => any,
-  ...args: any[]
-):
-  | [any, OwnedFunction<(...cotangents: any) => any>]
-  | [any, OwnedFunction<(...cotangents: any) => any>, any] {
-  // Check if second argument (first in args) is options object with hasAux
-  let opts: { hasAux?: boolean } | undefined;
-  let primalsIn = args;
-
-  const firstArg = args[0];
-  if (firstArg && typeof firstArg === "object" && "hasAux" in firstArg) {
-    opts = firstArg;
-    primalsIn = args.slice(1);
-  }
-
+  primalsIn: any[],
+): [any, OwnedFunction<(...cotangents: any) => any>] {
   const [primalsInFlat, inTree] = treeFlatten(primalsIn);
-
-  if (opts?.hasAux) {
-    const [fFlat, mainTree, auxTree] = flattenFun(f, inTree, { hasAux: true });
-    const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
-      fFlat,
-      primalsInFlat.map(pureArray),
-    );
-    if (mainTree.value === undefined || auxTree.value === undefined) {
-      throw new Error("Trees were not set in vjp with hasAux");
-    }
-    const mainSize = mainTree.value.size;
-    const primalsOut = treeUnflatten(
-      mainTree.value,
-      primalsOutFlat.slice(0, mainSize),
-    );
-    const aux = treeUnflatten(auxTree.value, primalsOutFlat.slice(mainSize));
-    const fVjp = createPullback(fVjpFlat, mainTree.value, inTree, dispose);
-    return [primalsOut, fVjp, aux];
-  }
-
   const [fFlat, outTree] = flattenFun(f, inTree);
   const [primalsOutFlat, fVjpFlat, dispose] = vjpFlat(
     fFlat,
@@ -1028,55 +967,75 @@ export function vjp(
     throw new Error("outTree was not set in vjp");
   }
   const primalsOut = treeUnflatten(outTree.value, primalsOutFlat);
-  const fVjp = createPullback(fVjpFlat, outTree.value, inTree, dispose);
+
+  // "cotangentsOut" because pullback
+  const fVjp = ((cotangentsOut: any) => {
+    const [cotangentsOutFlat, outTree2] = treeFlatten(cotangentsOut);
+    if (!outTree.value!.equals(outTree2)) {
+      throw new TreeMismatchError("vjp", outTree.value!, outTree2);
+    }
+    const cotangentsInFlat = fVjpFlat(...cotangentsOutFlat.map(pureArray));
+    return treeUnflatten(inTree, cotangentsInFlat);
+  }) as OwnedFunction<(...cotangents: any) => any>;
+  fVjp.dispose = dispose;
+
   return [primalsOut, fVjp];
 }
 
-export function grad(
-  f: (...primals: any) => Tracer,
-  opts?: { hasAux?: boolean },
-): (...x: any) => any {
-  const valueAndGradFn = valueAndGrad(f, opts as any);
+/** @inline */
+export type GradOpts = {
+  /**
+   * Integer or sequence of integers. Specifies which positional argument(s) to
+   * differentiate with respect to.
+   *
+   * Defaults to `0` (the first argument).
+   */
+  argnums?: number | number[];
+
+  /**
+   * The input function returns a pair of `[out, aux]` including an auxiliary
+   * value. This `aux` is not differentiated, but is returned alongside the
+   * gradient when evaluating the function.
+   */
+  hasAux?: boolean;
+};
+
+export function grad(f: (...primals: any) => Tracer, opts?: GradOpts) {
+  const valueAndGradFn = valueAndGrad(f, opts);
   return (...x: any) => {
-    if (opts?.hasAux) {
-      const [y, dx, aux] = valueAndGradFn(...x) as [any, any, any];
-      y.dispose();
-      return [dx, aux];
-    }
     const [y, dx] = valueAndGradFn(...x);
     y.dispose();
     return dx;
   };
 }
 
-export function valueAndGrad(
-  f: (...primals: any) => Tracer,
-  opts?: { hasAux?: boolean },
-): (...x: any) => any {
+export function valueAndGrad(f: (...primals: any) => Tracer, opts?: GradOpts) {
+  const argnums = opts?.argnums ?? 0; // By default, differentiate w.r.t. first arg.
+  checkInts(argnums);
+  const argnumsSet = new Set(typeof argnums === "number" ? [argnums] : argnums);
   return (...x: any) => {
     if (x.length === 0) {
       throw new Error("grad requires at least one argument to differentiate");
     }
-
-    // JAX convention: differentiate with respect to the first argument.
-    const primals = [x[0], ...x.slice(1).map(stopGradient)];
-    const vjpResult: [any, OwnedFunction<(cotangents: any) => any>, any?] =
-      opts?.hasAux ? vjp(f, { hasAux: true }, ...primals) : vjp(f, ...primals);
-
-    const [y, fVjp] = vjpResult;
-
+    // Differentiate only with respect to the argnums.
+    for (let i = 0; i < x.length; i++) {
+      if (!argnumsSet.has(i)) x[i] = treeMap(stopGradient, x[i]);
+    }
+    const [y, fVjp] = vjp(f, x);
     if (!(y instanceof Tracer) || ndim(y) !== 0) {
       throw new TypeError("grad requires a scalar output");
     }
     if (!isFloatDtype(y.dtype)) {
       throw new TypeError("grad only supports floating-point dtypes");
     }
-
-    const [ct, ...rest] = fVjp(onesLike(y.ref)); // backprop from scalar 1
-    for (const r of rest) treeDispose(r);
+    const cts = fVjp(onesLike(y.ref)); // backprop from scalar 1
     fVjp.dispose();
-
-    return opts?.hasAux ? [y, ct, vjpResult[2]] : [y, ct];
+    for (let i = 0; i < cts.length; i++) {
+      if (!argnumsSet.has(i)) treeDispose(cts[i]);
+    }
+    const grads =
+      typeof argnums === "number" ? cts[argnums] : argnums.map((i) => cts[i]);
+    return [y, grads];
   };
 }
 
@@ -1088,7 +1047,7 @@ export function jacrev(f: any) {
     }
     const [size] = x.shape;
     const pullback = (ct: Tracer) => {
-      const [y, fVjp] = vjp(f, x);
+      const [y, fVjp] = vjp(f, [x]);
       y.dispose();
       const [ret] = fVjp(ct);
       fVjp.dispose();

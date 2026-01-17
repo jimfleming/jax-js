@@ -110,14 +110,17 @@ suite("jax.makeJaxpr()", () => {
 
 suite("jax.linearize()", () => {
   test("works for scalars", () => {
-    const [y, lin] = linearize(np.sin, 3);
+    const [y, lin] = linearize(np.sin, [3]);
     expect(y).toBeAllclose(np.sin(3));
     expect(lin(1)).toBeAllclose(np.cos(3));
     expect(lin(-42)).toBeAllclose(np.cos(3).mul(-42));
   });
 
   test("works for simple arrays", () => {
-    const [y, lin] = linearize((x: np.Array) => x.ref.mul(x), np.array([2, 3]));
+    const [y, lin] = linearize(
+      (x: np.Array) => x.ref.mul(x),
+      [np.array([2, 3])],
+    );
     expect(y).toBeAllclose(np.array([4, 9]));
     expect(lin(np.array([1, 0]))).toBeAllclose(np.array([4, 0]));
     expect(lin(np.array([0, 1]))).toBeAllclose(np.array([0, 6]));
@@ -129,7 +132,7 @@ suite("jax.linearize()", () => {
         r1: x.a.ref.mul(x.a).add(x.b.ref),
         r2: x.b,
       }),
-      { a: 1, b: 2 },
+      [{ a: 1, b: 2 }],
     );
     expect(y.r1).toBeAllclose(3);
     expect(y.r2).toBeAllclose(2);
@@ -142,7 +145,7 @@ suite("jax.linearize()", () => {
 
 suite("jax.vjp()", () => {
   test("works for scalars", () => {
-    const [y, backward] = vjp(np.sin, 3);
+    const [y, backward] = vjp(np.sin, [3]);
     expect(y).toBeAllclose(np.sin(3));
     expect(backward(1)[0]).toBeAllclose(np.cos(3));
   });
@@ -155,7 +158,7 @@ suite("jax.vjp()", () => {
     };
 
     const x = np.array([1, 2, 3]);
-    const [loss, vjpFn, aux] = vjp(f, { hasAux: true }, x);
+    const [loss, vjpFn, aux] = vjp(f, [x], { hasAux: true });
 
     expect(loss).toBeAllclose(6);
     expect(aux).toBeAllclose([2, 4, 6]);
@@ -178,7 +181,7 @@ suite("jax.vjp()", () => {
     };
 
     const x = np.array([1, 2, 3]);
-    const [loss, vjpFn, aux] = vjp(f, { hasAux: true }, x);
+    const [loss, vjpFn, aux] = vjp(f, [x], { hasAux: true });
 
     expect(loss).toBeAllclose(6);
     expect(aux.predictions).toBeAllclose([2, 4, 6]);
@@ -196,7 +199,7 @@ suite("jax.vjp()", () => {
     };
 
     const x = np.array([1, 2, 3]);
-    const [main, vjpFn, _aux] = vjp(f, { hasAux: true }, x);
+    const [main, vjpFn, _aux] = vjp(f, [x], { hasAux: true });
 
     expect(main.a).toBeAllclose(6);
     expect(main.b).toBeAllclose(6);
@@ -210,7 +213,7 @@ suite("jax.vjp()", () => {
   test("hasAux throws if function does not return tuple", () => {
     const f = (x: np.Array) => x.sum();
     const x = np.array([1, 2, 3]);
-    expect(() => vjp(f as any, { hasAux: true }, x)).toThrow(/tuple/);
+    expect(() => vjp(f as any, [x], { hasAux: true })).toThrow(/tuple/);
   });
 
   test("hasAux gradients match vjp without aux", () => {
@@ -222,8 +225,8 @@ suite("jax.vjp()", () => {
 
     const x = np.array([1, 2, 3]);
 
-    const [, vjpFn1] = vjp(fWithAux, { hasAux: true }, x.ref);
-    const [, vjpFn2] = vjp(fWithoutAux, x);
+    const [, vjpFn1] = vjp(fWithAux, [x.ref], { hasAux: true });
+    const [, vjpFn2] = vjp(fWithoutAux, [x]);
 
     const [grad1] = vjpFn1(np.ones([]));
     const [grad2] = vjpFn2(np.ones([]));
@@ -240,7 +243,7 @@ suite("jax.vjp()", () => {
     ]);
 
     const x = np.array([1, 2, 3]);
-    const [loss, vjpFn, aux] = vjp(f, { hasAux: true }, x);
+    const [loss, vjpFn, aux] = vjp(f, [x], { hasAux: true });
 
     expect(loss).toBeAllclose(6);
     expect(aux).toBeAllclose([2, 4, 6]);
@@ -257,7 +260,8 @@ suite("jax.vjp()", () => {
     ];
 
     const outer = jit((x: np.Array): [np.Array, np.Array] => {
-      const [, vjpFn, aux] = vjp(inner, { hasAux: true }, x);
+      const [y, vjpFn, aux] = vjp(inner, [x], { hasAux: true });
+      tree.dispose(y);
       const [grad] = vjpFn(np.ones([]));
       vjpFn.dispose();
       return [grad, aux];
@@ -293,6 +297,27 @@ suite("jax.grad()", () => {
     const x = np.array([1, 2, 3, 4]);
     const gradProd = grad((x: np.Array) => np.prod(x))(x);
     expect(gradProd.js()).toEqual([24, 12, 8, 6]);
+  });
+
+  test("passing const argnums", () => {
+    const f = (x: np.Array, y: [np.Array, np.Array]) =>
+      x.ref.mul(y[0]).add(y[1]).sum();
+    const df_dx = grad(f, { argnums: 0 });
+    const df_dy = grad(f, { argnums: 1 });
+    const x = np.array([2, 3]);
+    const y: [np.Array, np.Array] = [np.array([4, 5]), np.array([10, 20])];
+
+    expect(df_dx(x.ref, tree.ref(y)).js()).toEqual([4, 5]); // dy/dx = y0
+    const w = df_dy(x.ref, tree.ref(y));
+    expect(w[0].js()).toEqual([2, 3]); // dy/dy0 = x
+    expect(w[1].js()).toEqual([1, 1]); // dy/dy1 = 1
+
+    // Now try with a tuple of argnums
+    const df_both = grad(f, { argnums: [1, 0] });
+    const [[dy0, dy1], dx] = df_both(x, y);
+    expect(dx.js()).toEqual([4, 5]);
+    expect(dy0.js()).toEqual([2, 3]);
+    expect(dy1.js()).toEqual([1, 1]);
   });
 
   test("backprops through auto-broadcast", () => {
@@ -451,7 +476,7 @@ suite("jax.valueAndGrad()", () => {
     };
 
     const x = np.array([1, 2, 3]);
-    const [value, gradient, aux] = valueAndGrad(f, { hasAux: true })(x);
+    const [[value, aux], gradient] = valueAndGrad(f, { hasAux: true })(x);
 
     expect(value).toBeAllclose(6);
     expect(gradient).toBeAllclose([1, 1, 1]);
@@ -467,8 +492,11 @@ suite("jax.valueAndGrad()", () => {
 
     const x = np.array([1, 2, 3]);
 
-    const [value1, grad1] = valueAndGrad(fWithAux, { hasAux: true })(x.ref);
+    const [[value1, aux1], grad1] = valueAndGrad(fWithAux, { hasAux: true })(
+      x.ref,
+    );
     const [value2, grad2] = valueAndGrad(fWithoutAux)(x);
+    aux1.dispose();
 
     expect(value1).toBeAllclose(value2);
     expect(grad1).toBeAllclose(grad2);
