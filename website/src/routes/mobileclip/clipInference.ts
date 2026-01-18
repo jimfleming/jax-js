@@ -130,27 +130,17 @@ export function runMultiHeadAttention(
   const qkv = runLinear(qkvProj, x); // [seqLen, 3 * embed]
 
   // Split into Q, K, V by slicing along the last dimension
-  const q_ = qkv.ref.slice([], [0, embed]);
-  const k_ = qkv.ref.slice([], [embed, 2 * embed]);
-  const v_ = qkv.slice([], [2 * embed, 3 * embed]);
+  const q = qkv.ref.slice([], [0, embed]);
+  const k = qkv.ref.slice([], [embed, 2 * embed]);
+  const v = qkv.slice([], [2 * embed, 3 * embed]);
 
-  // Reshape for multi-head attention: [numHeads, seqLen, headDim]
-  const q = q_.reshape([seqLen, numHeads, headDim]).transpose([1, 0, 2]);
-  const k = k_.reshape([seqLen, numHeads, headDim]).transpose([1, 0, 2]);
-  const v = v_.reshape([seqLen, numHeads, headDim]).transpose([1, 0, 2]);
-
-  // Compute attention scores: Q @ K^T / sqrt(headDim)
-  const scores = np.matmul(q, k.transpose([0, 2, 1])); // [numHeads, seqLen, seqLen]
-  const scaledScores = scores.mul(1 / Math.sqrt(headDim));
-
-  // Apply softmax
-  const attnWeights = nn.softmax(scaledScores, -1);
-
-  // Apply attention to values
-  const attnOutput = np.matmul(attnWeights, v); // [numHeads, seqLen, headDim]
-
-  // Transpose back and reshape: [seqLen, numHeads, headDim] -> [seqLen, embed]
-  const output = attnOutput.transpose([1, 0, 2]).reshape([seqLen, embed]);
+  const output = nn
+    .dotProductAttention(
+      q.reshape([seqLen, numHeads, headDim]),
+      k.reshape([seqLen, numHeads, headDim]),
+      v.reshape([seqLen, numHeads, headDim]),
+    )
+    .reshape([seqLen, embed]);
 
   // Final projection
   return runLinear(outProj, output);
