@@ -121,18 +121,12 @@ export function runMultiHeadAttention(
   x: np.Array,
 ): np.Array {
   const numHeads = 8;
-
-  // x shape: [seqLen, embed]
   const [seqLen, embed] = x.shape;
   const headDim = embed / numHeads;
 
   // Project to Q, K, V
   const qkv = runLinear(qkvProj, x); // [seqLen, 3 * embed]
-
-  // Split into Q, K, V by slicing along the last dimension
-  const q = qkv.ref.slice([], [0, embed]);
-  const k = qkv.ref.slice([], [embed, 2 * embed]);
-  const v = qkv.slice([], [2 * embed, 3 * embed]);
+  const [q, k, v] = np.split(qkv, 3, -1);
 
   const output = nn
     .dotProductAttention(
